@@ -357,7 +357,6 @@
 // ─── Constants ──────────────────────────────────────────────────────────────
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat'];
 const BATH = { Wesley: ['Mon','Wed','Fri'], Walker: ['Tue','Thu','Sat'] };
-const MODEL = 'claude-opus-4-7';
 
 const BASE_ROOM = [
   { id:'room1', label:'Room Wide 1' },
@@ -407,7 +406,6 @@ const S = {
   gradePct:   0,
   msg:        '',
   msgType:    'ok',
-  apiKey:        '',
   difficulty:    3,   // 1=Very Easy … 5=Very Strict
   maxAllowance:  50,  // weekly max payout in dollars; configurable in Setup
 };
@@ -507,8 +505,6 @@ async function _deletePhoto(boy, day) {
 
 function loadState() {
   try {
-    const k = localStorage.getItem('rsc_apikey');
-    if (k) S.apiKey = k;
     const d = localStorage.getItem('rsc_difficulty');
     if (d) { const n = parseInt(d,10); if (n>=1 && n<=5) S.difficulty = n; }
     const ma = localStorage.getItem('rsc_maxAllowance');
@@ -549,7 +545,6 @@ function savePhotos() {
 }
 
 function saveBaselines()  { try { localStorage.setItem('rsc_baselines_v1', JSON.stringify(S.baselines)); } catch(e) { showMsg('Storage error — try freeing space','err'); } }
-function saveApiKey()     { try { localStorage.setItem('rsc_apikey', S.apiKey); } catch(e) {} }
 function saveDifficulty()    { try { localStorage.setItem('rsc_difficulty', String(S.difficulty)); } catch(e) {} }
 function saveMaxAllowance() { try { localStorage.setItem('rsc_maxAllowance', String(S.maxAllowance)); } catch(e) {} }
 
@@ -573,7 +568,7 @@ function allowance(pct, maxAmt) {
   if (pct >= 70) return '$' + Math.round(m * 0.80);
   if (pct >= 60) return '$' + Math.round(m * 0.70);
   if (pct >= 50) return '$' + Math.round(m * 0.60);
-  return "Dad's call";
+  return "Parents' call";
 }
 
 function roomScore(e)  { return (e.floor||0)+(e.desk||0)+(e.trash||0); }
@@ -728,8 +723,6 @@ function makeSlot(uid, label, initB64, onDone, isBaseline, onThumb) {
 
 // ─── AI Grading ──────────────────────────────────────────────────────────────
 async function gradePhotos() {
-  if (!S.apiKey) { showMsg('Enter your API key in Setup first','warn'); return; }
-
   const boy = S.boy, day = S.day;
   const hasBath = isBathDay(boy, day);
 
@@ -817,27 +810,21 @@ async function gradePhotos() {
 
     S.gradePct = 65; render();
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('/grade', {
       method: 'POST',
-      headers: {
-        'x-api-key': S.apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({ model: MODEL, max_tokens: 8000, thinking: { type: 'adaptive' }, messages: [{ role:'user', content }] })
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content }),
     });
 
     S.gradePct = 88; render();
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `HTTP ${res.status}`);
+      throw new Error(err.error || `HTTP ${res.status}`);
     }
 
     const data = await res.json();
-    // Adaptive thinking may prepend a `thinking` block — find the text block explicitly
-    const raw = data.content?.find(c => c.type === 'text')?.text || '';
+    const raw = data.text || '';
 
     // Three-tier JSON parse
     let parsed = null;
@@ -992,18 +979,6 @@ function renderPage() {
 
 // ── Setup tab ──
 function renderSetup(el) {
-  // API Key
-  const apiCard = mkCard('API Key');
-  const inp = document.createElement('input');
-  inp.type = 'password'; inp.placeholder = 'sk-ant-...'; inp.value = S.apiKey;
-  inp.oninput = () => { S.apiKey = inp.value.trim(); saveApiKey(); };
-  apiCard.appendChild(inp);
-  const hint1 = document.createElement('div');
-  hint1.className = 'hint';
-  hint1.textContent = 'Stored locally in your browser. Sent directly to Anthropic. Never shared.';
-  apiCard.appendChild(hint1);
-  el.appendChild(apiCard);
-
   // Grading Difficulty
   const diffCard = mkCard('Grading Difficulty');
   const diffDesc = document.createElement('div');
@@ -1432,7 +1407,7 @@ function renderSummary(el) {
     ['70 – 79%',  '$' + Math.round(m * 0.80)],
     ['60 – 69%',  '$' + Math.round(m * 0.70)],
     ['50 – 59%',  '$' + Math.round(m * 0.60)],
-    ['< 50%',     "Dad's call"],
+    ['< 50%',     "Parents' call"],
   ];
   scaleTiers.forEach(([range, amt]) => {
     const r = document.createElement('div');
