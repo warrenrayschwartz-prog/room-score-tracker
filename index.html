@@ -954,7 +954,8 @@ function renderTabs() {
       autoSave();                          // persist pending grade before leaving
       gradingToken++;                      // invalidate any in-flight API call
       S.grading = false; S.gradePct = 0;
-      S.photos = {}; S.thumbs = {};
+      // Photos are scoped to (boy, day) and cleared on boy/day change or after
+      // grading completes. Don't wipe them on tab nav — that loses pre-grade uploads.
       S.tab = t.toLowerCase(); S.msg = ''; render();
     };
     el.appendChild(b);
