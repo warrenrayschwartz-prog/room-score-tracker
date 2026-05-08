@@ -339,6 +339,56 @@
     @media (max-width: 340px) {
       .score-grid { grid-template-columns: 1fr; }
     }
+
+    /* ── Print ── */
+    @media print {
+      @page { size: letter portrait; margin: 0.45in; }
+
+      *, *::before, *::after {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      body { background: #fff !important; color: #111 !important; font-size: 11px !important; }
+
+      .hdr, .tabs, .no-print, .msg { display: none !important; }
+
+      .page { padding: 0 !important; max-width: 100% !important; margin: 0 !important; }
+
+      .card {
+        background: #fff !important;
+        border: 1px solid #bbb !important;
+        border-radius: 4px !important;
+        padding: 8px 12px !important;
+        margin-bottom: 8px !important;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+      .card-title { color: #666 !important; font-size: 9px !important; margin-bottom: 8px !important; }
+
+      /* Summary cards */
+      .sum-grid { grid-template-columns: 1fr 1fr !important; gap: 8px !important; margin-bottom: 8px !important; }
+      .sum-card { background: #fff !important; padding: 10px 12px !important; border-radius: 4px !important; break-inside: avoid; }
+      .sum-card.wes { border-color: #7c6fff !important; }
+      .sum-card.wal { border-color: #ff6b8a !important; }
+      .sum-name { font-size: 16px !important; margin-bottom: 4px !important; }
+      .sum-card.wes .sum-name { color: #7c6fff !important; }
+      .sum-card.wal .sum-name { color: #ff6b8a !important; }
+      .sum-pts { font-size: 30px !important; line-height: 1 !important; }
+      .sum-allow { font-size: 18px !important; color: #1a7a1a !important; margin-bottom: 4px !important; }
+      .sum-break { font-size: 10px !important; color: #555 !important; line-height: 1.6 !important; }
+      .empty { color: #888 !important; }
+
+      /* Day breakdown rows */
+      .day-row-entry { padding: 4px 0 !important; }
+      .day-row-name { font-size: 12px !important; }
+      .day-row-pts { font-size: 14px !important; }
+      .btn-ghost.btn-sm { display: none !important; }  /* hide × delete buttons */
+      .badge-bath { background: #e8f0fe !important; color: #1a73e8 !important; border-color: #a8c7fa !important; }
+
+      /* Allowance scale rows */
+      .div { background: #ddd !important; }
+    }
   </style>
 </head>
 <body>
@@ -1314,6 +1364,14 @@ function renderResult(el, result) {
 
 // ── Summary tab ──
 function renderSummary(el) {
+  // Print button — hidden in @media print itself
+  const printBtn = document.createElement('button');
+  printBtn.className = 'btn btn-ghost btn-full no-print';
+  printBtn.style.marginBottom = '14px';
+  printBtn.innerHTML = '🖨️ &nbsp;Print Summary';
+  printBtn.onclick = () => window.print();
+  el.appendChild(printBtn);
+
   const sumGrid = document.createElement('div');
   sumGrid.className = 'sum-grid';
 
@@ -1418,8 +1476,9 @@ function renderSummary(el) {
   });
   el.appendChild(scaleCard);
 
-  // Week Management — per-boy clear + full reset
+  // Week Management — per-boy clear + full reset (hidden on print)
   const resetCard = mkCard('Week Management');
+  resetCard.classList.add('no-print');
   const hint = document.createElement('div');
   hint.className = 'hint'; hint.style.marginBottom = '12px';
   hint.textContent = 'Clears scores and photos for that week. Baseline images are never affected.';
