@@ -342,14 +342,15 @@
 
     /* ── Print ── */
     @media print {
-      @page { size: letter portrait; margin: 0.45in; }
+      @page { size: letter portrait; margin: 0.3in; }
 
       *, *::before, *::after {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
+        box-sizing: border-box !important;
       }
 
-      body { background: #fff !important; color: #111 !important; font-size: 11px !important; }
+      body { background: #fff !important; color: #111 !important; font-size: 10px !important; }
 
       .hdr, .tabs, .no-print, .msg { display: none !important; }
 
@@ -358,36 +359,45 @@
       .card {
         background: #fff !important;
         border: 1px solid #bbb !important;
-        border-radius: 4px !important;
-        padding: 8px 12px !important;
-        margin-bottom: 8px !important;
+        border-radius: 3px !important;
+        padding: 6px 10px !important;
+        margin-bottom: 6px !important;
         break-inside: avoid;
         page-break-inside: avoid;
       }
-      .card-title { color: #666 !important; font-size: 9px !important; margin-bottom: 8px !important; }
+      .card-title { color: #666 !important; font-size: 8px !important; margin-bottom: 6px !important; }
 
-      /* Summary cards */
-      .sum-grid { grid-template-columns: 1fr 1fr !important; gap: 8px !important; margin-bottom: 8px !important; }
-      .sum-card { background: #fff !important; padding: 10px 12px !important; border-radius: 4px !important; break-inside: avoid; }
+      /* Weekly summary cards — side by side */
+      .sum-grid { grid-template-columns: 1fr 1fr !important; gap: 6px !important; margin-bottom: 6px !important; }
+      .sum-card { background: #fff !important; padding: 8px 10px !important; border-radius: 3px !important; border-width: 2px !important; break-inside: avoid; }
       .sum-card.wes { border-color: #7c6fff !important; }
       .sum-card.wal { border-color: #ff6b8a !important; }
-      .sum-name { font-size: 16px !important; margin-bottom: 4px !important; }
+      .sum-name { font-size: 14px !important; margin-bottom: 2px !important; }
       .sum-card.wes .sum-name { color: #7c6fff !important; }
       .sum-card.wal .sum-name { color: #ff6b8a !important; }
-      .sum-pts { font-size: 30px !important; line-height: 1 !important; }
-      .sum-allow { font-size: 18px !important; color: #1a7a1a !important; margin-bottom: 4px !important; }
-      .sum-break { font-size: 10px !important; color: #555 !important; line-height: 1.6 !important; }
-      .empty { color: #888 !important; }
+      .sum-pts { font-size: 26px !important; line-height: 1 !important; }
+      .sum-allow { font-size: 15px !important; color: #1a7a1a !important; margin-bottom: 2px !important; }
+      .sum-break { font-size: 9px !important; color: #555 !important; line-height: 1.5 !important; }
+      .empty { color: #888 !important; font-size: 10px !important; }
+
+      /* Breakdown cards — side by side */
+      .breakdown-wrap {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 6px !important;
+        margin-bottom: 6px !important;
+      }
+      .breakdown-wrap .card { margin-bottom: 0 !important; }
 
       /* Day breakdown rows */
-      .day-row-entry { padding: 4px 0 !important; }
-      .day-row-name { font-size: 12px !important; }
-      .day-row-pts { font-size: 14px !important; }
-      .btn-ghost.btn-sm { display: none !important; }  /* hide × delete buttons */
-      .badge-bath { background: #e8f0fe !important; color: #1a73e8 !important; border-color: #a8c7fa !important; }
+      .day-row-entry { padding: 3px 0 !important; }
+      .day-row-name { font-size: 11px !important; min-width: 28px !important; }
+      .day-row-pts { font-size: 13px !important; }
+      .btn-ghost.btn-sm { display: none !important; }
+      .badge-bath { background: #e8f0fe !important; color: #1a73e8 !important; border-color: #a8c7fa !important; font-size: 8px !important; }
 
-      /* Allowance scale rows */
-      .div { background: #ddd !important; }
+      /* Allowance scale */
+      .div { background: #ddd !important; margin: 6px 0 !important; }
     }
   </style>
 </head>
@@ -1413,7 +1423,10 @@ function renderSummary(el) {
   });
   el.appendChild(sumGrid);
 
-  // Per-boy day breakdown
+  // Per-boy day breakdown — wrapped so print can put them side by side
+  const breakdownWrap = document.createElement('div');
+  breakdownWrap.className = 'breakdown-wrap';
+
   ['Wesley','Walker'].forEach(boy => {
     const card = mkCard(`${boy} — Daily Breakdown`);
     const entries = Object.entries(S.scores[boy])
@@ -1454,8 +1467,9 @@ function renderSummary(el) {
         card.appendChild(row);
       });
     }
-    el.appendChild(card);
+    breakdownWrap.appendChild(card);
   });
+  el.appendChild(breakdownWrap);
 
   // Allowance scale reference — dynamically reflects configured maximum
   const m = S.maxAllowance || 50;
