@@ -374,20 +374,8 @@
       flex-shrink: 0;
     }
     .child-name { font-weight: 600; font-size: 17px; flex: 1; }
-    .child-bath { font-size: 12px; color: var(--muted); }
+    .child-bath-pills { display: flex; gap: 4px; flex-wrap: wrap; }
     .child-add-form { padding: 12px 16px 16px; }
-    .bath-day-row { display: flex; gap: 5px; flex-wrap: wrap; margin: 6px 0 12px; }
-    .bath-day-btn {
-      padding: 5px 10px;
-      border-radius: 16px;
-      border: 1.5px solid var(--sep);
-      background: var(--bg);
-      font-size: 12px; font-weight: 600;
-      cursor: pointer;
-      color: var(--text2);
-      transition: all .15s;
-    }
-    .bath-day-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 
     /* ── Responsive ── */
     @media (max-width: 480px) {
@@ -1125,11 +1113,19 @@ function renderSetup(el) {
       nameEl.textContent = child.name;
       row.appendChild(nameEl);
 
-      const bathEl = document.createElement('span');
-      bathEl.className = 'child-bath';
-      bathEl.textContent = child.bathDays.length > 0
-        ? '🛁 ' + child.bathDays.join(', ')
-        : 'No bath days';
+      const bathEl = document.createElement('div');
+      bathEl.className = 'child-bath-pills';
+      if (child.bathDays.length > 0) {
+        child.bathDays.forEach(d => {
+          const p = document.createElement('span');
+          p.style.cssText = `display:inline-block;padding:3px 10px;border-radius:20px;background:var(--accent);color:#fff;font-size:12px;font-weight:600;`;
+          p.textContent = d;
+          bathEl.appendChild(p);
+        });
+      } else {
+        bathEl.style.cssText = 'font-size:12px;color:var(--muted)';
+        bathEl.textContent = 'No bath days';
+      }
       row.appendChild(bathEl);
 
       const removeBtn = document.createElement('button');
@@ -1168,14 +1164,16 @@ function renderSetup(el) {
   nameInp.oninput = () => { S.pendingChildName = nameInp.value; };  // no render()
 
   const bathLbl = document.createElement('div');
-  bathLbl.style.cssText = 'font-size:13px;color:var(--muted);margin-bottom:6px;';
-  bathLbl.textContent = 'Bath days';
+  bathLbl.style.cssText = 'font-size:13px;color:var(--muted);margin-bottom:4px;';
+  bathLbl.textContent = 'Bathroom days';
 
+  // Use the same .day-row / .day-pill classes as the Grade tab's day selector
   const bathRow = document.createElement('div');
-  bathRow.className = 'bath-day-row';
+  bathRow.className = 'day-row';
+  bathRow.style.cssText = 'padding:4px 0 8px;';
   DAYS.forEach(d => {
     const btn = document.createElement('button');
-    btn.className = 'bath-day-btn' + (S.pendingBathDays.includes(d) ? ' on' : '');
+    btn.className = 'day-pill' + (S.pendingBathDays.includes(d) ? ' on' : '');
     btn.textContent = d;
     btn.onclick = () => {
       if (S.pendingBathDays.includes(d)) {
