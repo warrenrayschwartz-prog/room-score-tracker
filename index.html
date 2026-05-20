@@ -21,8 +21,6 @@
       --warn:   #FF9500;
       --err:    #FF3B30;
       --info:   #32ADE6;
-      --wes:    #5856D6;
-      --wal:    #FF2D55;
     }
 
     body {
@@ -112,7 +110,6 @@
       padding: 20px 16px 6px;
       margin: 0 0 0 0;
       background: transparent;
-      /* renders ABOVE the card — mkCard injects into card but we style it as section header */
     }
 
     /* ── Form inputs ── */
@@ -153,16 +150,19 @@
     .btn-full    { width: 100%; }
     .btn-wrap    { padding: 0 16px 8px; }
 
-    /* ── Segmented Control (Wesley / Walker) ── */
+    /* ── Segmented Control ── */
     .seg-control {
       display: flex;
       background: rgba(118,118,128,0.12);
       border-radius: 9px;
       padding: 2px;
       margin: 8px 16px 4px;
+      overflow-x: auto;
+      gap: 0;
     }
     .seg-btn {
       flex: 1;
+      min-width: 60px;
       padding: 7px 12px;
       border-radius: 7px;
       border: none;
@@ -174,16 +174,12 @@
       cursor: pointer;
       transition: all 0.2s;
       text-align: center;
+      white-space: nowrap;
     }
-    .seg-btn.on-wes {
+    .seg-btn.on-child {
       background: #fff;
-      color: var(--wes);
       box-shadow: 0 1px 3px rgba(0,0,0,0.14), 0 1px 1px rgba(0,0,0,0.06);
-    }
-    .seg-btn.on-wal {
-      background: #fff;
-      color: var(--wal);
-      box-shadow: 0 1px 3px rgba(0,0,0,0.14), 0 1px 1px rgba(0,0,0,0.06);
+      /* color set inline per child */
     }
 
     /* ── Day pills ── */
@@ -304,8 +300,6 @@
       box-shadow: 0 1px 4px rgba(0,0,0,0.08);
     }
     .sum-name { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
-    .sum-card.wes .sum-name { color: var(--wes); }
-    .sum-card.wal .sum-name { color: var(--wal); }
     .sum-pts   { font-size: 44px; font-weight: 700; line-height: 1; letter-spacing: -1.5px; }
     .sum-allow { font-size: 22px; font-weight: 700; color: var(--ok); margin-bottom: 4px; letter-spacing: -0.5px; }
     .sum-break { font-size: 12px; color: var(--muted); line-height: 1.8; }
@@ -366,6 +360,35 @@
     .diff-btn.on { border-color: var(--accent); background: rgba(0,122,255,0.08); color: var(--accent); }
     .diff-btn span:first-child { font-size: 20px; }
 
+    /* ── Children management ── */
+    .child-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      border-bottom: 0.5px solid var(--sep);
+    }
+    .child-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .child-name { font-weight: 600; font-size: 17px; flex: 1; }
+    .child-bath { font-size: 12px; color: var(--muted); }
+    .child-add-form { padding: 12px 16px 16px; }
+    .bath-day-row { display: flex; gap: 5px; flex-wrap: wrap; margin: 6px 0 12px; }
+    .bath-day-btn {
+      padding: 5px 10px;
+      border-radius: 16px;
+      border: 1.5px solid var(--sep);
+      background: var(--bg);
+      font-size: 12px; font-weight: 600;
+      cursor: pointer;
+      color: var(--text2);
+      transition: all .15s;
+    }
+    .bath-day-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
     /* ── Responsive ── */
     @media (max-width: 480px) {
       .sum-grid { grid-template-columns: 1fr 1fr; }
@@ -387,12 +410,8 @@
       .card { background: #fff !important; border: 1px solid #bbb !important; border-radius: 3px !important; padding: 6px 10px !important; margin: 0 0 6px !important; box-shadow: none !important; break-inside: avoid; page-break-inside: avoid; }
       .card-title { color: #666 !important; font-size: 8px !important; padding: 0 0 6px !important; }
       .sum-grid { grid-template-columns: 1fr 1fr !important; gap: 6px !important; padding: 0 !important; margin-bottom: 6px !important; }
-      .sum-card { background: #fff !important; padding: 8px 10px !important; border-radius: 3px !important; box-shadow: none !important; border: 2px solid #ddd !important; break-inside: avoid; }
-      .sum-card.wes { border-color: #5856D6 !important; }
-      .sum-card.wal { border-color: #FF2D55 !important; }
+      .sum-card { background: #fff !important; padding: 8px 10px !important; border-radius: 3px !important; box-shadow: none !important; border: 2px solid var(--child-color, #ddd) !important; break-inside: avoid; }
       .sum-name { font-size: 10px !important; margin-bottom: 2px !important; }
-      .sum-card.wes .sum-name { color: #5856D6 !important; }
-      .sum-card.wal .sum-name { color: #FF2D55 !important; }
       .sum-pts { font-size: 26px !important; letter-spacing: -1px !important; }
       .sum-allow { font-size: 15px !important; color: #1a7a1a !important; margin-bottom: 2px !important; }
       .sum-break { font-size: 9px !important; color: #555 !important; line-height: 1.5 !important; }
@@ -423,7 +442,9 @@
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat'];
-const BATH = { Wesley: ['Mon','Wed','Fri'], Walker: ['Tue','Thu','Sat'] };
+
+// Color palette for children — first two match original Wesley/Walker colors
+const CHILD_COLORS = ['#5856D6','#FF2D55','#FF9500','#34C759','#007AFF','#AF52DE','#FF3B30','#32ADE6'];
 
 const BASE_ROOM = [
   { id:'room1', label:'Room Wide 1' },
@@ -460,24 +481,28 @@ const BATH_CATS = [
 // ─── State ──────────────────────────────────────────────────────────────────
 const S = {
   tab:        'grade',
-  boy:        'Wesley',
+  boy:        '',          // active child name — set after loadState()
   day:        todayDay(),
-  scores:     { Wesley:{}, Walker:{} },
-  savedPhotos:{ Wesley:{}, Walker:{} }, // review thumbnails stored separately from scores
+  children:   [],          // [{ name, color, bathDays }]
+  scores:     {},          // { [childName]: { [day]: entry } }
+  savedPhotos:{},          // { [childName]: { [day]: { slotId: thumb } } }
   baselines:  {},
-  photos:     {}, // full-res images sent to Claude API
-  thumbs:     {}, // 120px/q=0.20 thumbnails stored for review — much smaller than photos
+  photos:     {},
+  thumbs:     {},
   result:     null,
   regrade:    false,
   grading:    false,
   gradePct:   0,
   msg:        '',
   msgType:    'ok',
-  difficulty:    3,   // 1=Very Easy … 5=Very Strict
-  maxAllowance:  50,  // weekly max payout in dollars; configurable in Setup
+  difficulty:    3,
+  maxAllowance:  50,
+  // Pending "add child" form state — persists across re-renders
+  pendingChildName: '',
+  pendingBathDays:  [],
 };
 
-// Difficulty level definitions — drive both UI labels and AI prompt language
+// Difficulty level definitions
 const DIFFICULTY = [
   { level:1, label:'Very Easy',   emoji:'😊', desc:'Participation trophy — any attempt earns high marks',
     lens: 'very lenient "dad just wants to encourage" lens — reward any genuine effort, give benefit of the doubt on everything, score near the top of each range unless something is truly terrible',
@@ -526,9 +551,14 @@ function todayDay() {
   return map[new Date().getDay()] || 'Mon';
 }
 
-// ─── IndexedDB Photo Storage ─────────────────────────────────────────────────
-// Photos live in IndexedDB (no practical size limit) instead of localStorage.
+// ─── Child helpers ───────────────────────────────────────────────────────────
+function getChild(name) { return S.children.find(c => c.name === name) || null; }
+function isBathDay(boy, day) {
+  const child = getChild(boy);
+  return child ? child.bathDays.includes(day) : false;
+}
 
+// ─── IndexedDB Photo Storage ─────────────────────────────────────────────────
 let _photoDB = null;
 function _openDB() {
   if (_photoDB) return Promise.resolve(_photoDB);
@@ -543,16 +573,22 @@ async function _loadAllPhotos() {
   try {
     const db = await _openDB();
     return new Promise(res => {
-      const out = { Wesley:{}, Walker:{} };
+      // Build output keyed by all known child names
+      const out = {};
+      S.children.forEach(c => { out[c.name] = {}; });
       db.transaction('photos','readonly').objectStore('photos').openCursor().onsuccess = e => {
-        const c = e.target.result;
-        if (!c) { res(out); return; }
-        const [boy, day] = c.key.split('|');
-        if (out[boy]) out[boy][day] = c.value;
-        c.continue();
+        const cur = e.target.result;
+        if (!cur) { res(out); return; }
+        const [boy, day] = cur.key.split('|');
+        if (out[boy]) out[boy][day] = cur.value;
+        cur.continue();
       };
     });
-  } catch(e) { return { Wesley:{}, Walker:{} }; }
+  } catch(e) {
+    const out = {};
+    S.children.forEach(c => { out[c.name] = {}; });
+    return out;
+  }
 }
 async function _putPhoto(boy, day, photos) {
   try {
@@ -572,52 +608,71 @@ async function _deletePhoto(boy, day) {
 
 function loadState() {
   try {
+    // Settings
     const d = localStorage.getItem('rsc_difficulty');
     if (d) { const n = parseInt(d,10); if (n>=1 && n<=5) S.difficulty = n; }
     const ma = localStorage.getItem('rsc_maxAllowance');
     if (ma) { const n = parseFloat(ma); if (!isNaN(n) && n >= 0) S.maxAllowance = n; }
 
+    // Baselines
     const bl = localStorage.getItem('rsc_baselines_v1');
     if (bl) S.baselines = JSON.parse(bl);
 
-    // Load scores — strip any legacy embedded photos from old app versions
-    const sc = localStorage.getItem('rsc_scores_v4');
-    if (sc) {
-      const p = JSON.parse(sc);
-      ['Wesley','Walker'].forEach(boy => {
-        const days = p[boy] || {};
-        Object.keys(days).forEach(day => { delete days[day].photos; }); // remove legacy embedded photos
-        S.scores[boy] = days;
-      });
+    // Children — with migration from old fixed Wesley/Walker format
+    const chRaw = localStorage.getItem('rsc_children');
+    if (chRaw) {
+      S.children = JSON.parse(chRaw);
+    } else {
+      // Auto-migrate: if scores exist for Wesley and/or Walker, create those children
+      const scRaw = localStorage.getItem('rsc_scores_v4');
+      if (scRaw) {
+        const p = JSON.parse(scRaw);
+        if (p.Wesley) S.children.push({ name:'Wesley', color:'#5856D6', bathDays:['Mon','Wed','Fri'] });
+        if (p.Walker) S.children.push({ name:'Walker', color:'#FF2D55', bathDays:['Tue','Thu','Sat'] });
+      }
+      if (S.children.length) saveChildren();
     }
 
-    // Photos are loaded async from IndexedDB in init() below.
+    // Set default active child
+    S.boy = S.children[0]?.name || '';
+
+    // Initialize score/photo structures for every child
+    S.children.forEach(c => {
+      S.scores[c.name] = {};
+      S.savedPhotos[c.name] = {};
+    });
+
+    // Load saved scores
+    const scRaw = localStorage.getItem('rsc_scores_v4');
+    if (scRaw) {
+      const p = JSON.parse(scRaw);
+      S.children.forEach(child => {
+        const days = p[child.name] || {};
+        Object.keys(days).forEach(day => { delete days[day].photos; });
+        S.scores[child.name] = days;
+      });
+    }
   } catch(e) {}
 }
 
-// Scores are lean (numbers only) — always fits comfortably in storage
 function saveScores() {
-  try {
-    localStorage.setItem('rsc_scores_v4', JSON.stringify(S.scores));
-  } catch(e) { showMsg('Storage error saving scores', 'err'); }
+  try { localStorage.setItem('rsc_scores_v4', JSON.stringify(S.scores)); } catch(e) { showMsg('Storage error saving scores', 'err'); }
 }
-
-// Photos stored in IndexedDB — fire-and-forget, no quota issues.
 function savePhotos() {
-  ['Wesley','Walker'].forEach(boy =>
-    Object.entries(S.savedPhotos[boy]).forEach(([day, photos]) =>
-      _putPhoto(boy, day, photos)
+  S.children.forEach(c =>
+    Object.entries(S.savedPhotos[c.name] || {}).forEach(([day, photos]) =>
+      _putPhoto(c.name, day, photos)
     )
   );
 }
-
-function saveBaselines()  { try { localStorage.setItem('rsc_baselines_v1', JSON.stringify(S.baselines)); } catch(e) { showMsg('Storage error — try freeing space','err'); } }
-function saveDifficulty()    { try { localStorage.setItem('rsc_difficulty', String(S.difficulty)); } catch(e) {} }
-function saveMaxAllowance() { try { localStorage.setItem('rsc_maxAllowance', String(S.maxAllowance)); } catch(e) {} }
+function saveChildren()     { try { localStorage.setItem('rsc_children',       JSON.stringify(S.children)); } catch(e) {} }
+function saveBaselines()    { try { localStorage.setItem('rsc_baselines_v1',    JSON.stringify(S.baselines)); } catch(e) { showMsg('Storage error — try freeing space','err'); } }
+function saveDifficulty()   { try { localStorage.setItem('rsc_difficulty',      String(S.difficulty)); } catch(e) {} }
+function saveMaxAllowance() { try { localStorage.setItem('rsc_maxAllowance',    String(S.maxAllowance)); } catch(e) {} }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 let msgTimer = null;
-let gradingToken = 0; // incremented on each navigation; async grade checks it to detect stale results
+let gradingToken = 0;
 function showMsg(text, type='ok') {
   S.msg = text; S.msgType = type;
   render();
@@ -625,9 +680,7 @@ function showMsg(text, type='ok') {
   if (type === 'ok' || type === 'info') msgTimer = setTimeout(() => { S.msg=''; render(); }, 4000);
 }
 
-function isBathDay(boy, day) { return BATH[boy].includes(day); }
-
-// pct = 0–100 percentage earned this week; maxAmt defaults to S.maxAllowance
+// pct = 0–100 percentage earned this week
 function allowance(pct, maxAmt) {
   const m = (maxAmt != null ? maxAmt : S.maxAllowance) || 50;
   if (pct >= 90) return '$' + Math.round(m);
@@ -641,12 +694,10 @@ function allowance(pct, maxAmt) {
 function roomScore(e)  { return (e.floor||0)+(e.desk||0)+(e.trash||0); }
 function bathScore(e)  { return (e.sink||0)+(e.towels||0)+(e.counter||0); }
 
-// Percentage-based weekly score: total earned ÷ total possible × 100.
-// projPct projects the full 6-day week, treating ungraded days as perfect (60/60 or 90/90).
-// This means one bad early day has its natural 1/6 weight, not 100% weight.
-// When all 6 days are graded, projPct === pct.
 function calcWeekly(boy) {
-  const entries = Object.entries(S.scores[boy]);
+  const child = getChild(boy);
+  if (!child) return null;
+  const entries = Object.entries(S.scores[boy] || {});
   if (!entries.length) return null;
   const roomDays = entries.filter(([,e]) => e.floor != null);
   const bathDays = entries.filter(([,e]) => e.hasBath);
@@ -655,19 +706,18 @@ function calcWeekly(boy) {
   bathDays.forEach(([,e]) => { earned += bathScore(e); possible += 30; });
   const pct = possible > 0 ? Math.round((earned / possible) * 100) : 0;
 
-  // Project remaining ungraded days at full marks so the display is week-stable
   const gradedSet = new Set(entries.map(([d]) => d));
   const ungradedDays = DAYS.filter(d => !gradedSet.has(d));
   let ungradedMax = 0;
   ungradedDays.forEach(d => {
-    ungradedMax += 60; // room
-    if (BATH[boy].includes(d)) ungradedMax += 30; // bath on bath days
+    ungradedMax += 60;
+    if (child.bathDays.includes(d)) ungradedMax += 30;
   });
-  const projEarned   = earned + ungradedMax;   // ungraded days contribute full marks
+  const projEarned   = earned + ungradedMax;
   const projPossible = possible + ungradedMax;
   const projPct = projPossible > 0 ? Math.round((projEarned / projPossible) * 100) : 0;
   const daysGraded = roomDays.length;
-  const totalDays  = DAYS.length; // 6
+  const totalDays  = DAYS.length;
 
   return { pct, projPct, earned, possible, daysGraded, totalDays, roomDays: roomDays.length, bathDays: bathDays.length };
 }
@@ -701,8 +751,6 @@ function compressImage(file, maxW, q) {
 }
 
 // ─── Photo Slot ──────────────────────────────────────────────────────────────
-// Returns a self-contained DOM node. Updates itself without calling render().
-// onThumb(b64): optional — called with a 160px/q=0.30 thumbnail for review storage
 function makeSlot(uid, label, initB64, onDone, isBaseline, onThumb) {
   const maxW = isBaseline ? 380 : 500;
   const q    = isBaseline ? 0.42 : 0.58;
@@ -719,7 +767,6 @@ function makeSlot(uid, label, initB64, onDone, isBaseline, onThumb) {
   lbl.className = 'slot-label';
   lbl.textContent = label;
 
-  // Invisible overlay button — iOS Safari only fires input.click() from button
   const btn = document.createElement('button');
   btn.className = 'slot-btn';
   btn.setAttribute('aria-label', 'Upload ' + label);
@@ -727,7 +774,6 @@ function makeSlot(uid, label, initB64, onDone, isBaseline, onThumb) {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/*';
-  // display:none blocks Safari's file picker — hide with zero dimensions instead
   input.style.cssText = 'position:absolute;width:0;height:0;opacity:0;overflow:hidden;pointer-events:none';
 
   let imgEl = null;
@@ -743,13 +789,11 @@ function makeSlot(uid, label, initB64, onDone, isBaseline, onThumb) {
 
   async function processFile(file) {
     if (!file) return;
-    // If type is present and not an image, warn (empty type = Photos.app drag on Mac, allow it)
     if (file.type && !file.type.startsWith('image/')) {
       showMsg(`Not an image file (${file.type})`, 'warn');
       return;
     }
     try {
-      // Compress full-res for Claude and tiny thumbnail for review in parallel
       const [b64, thumb] = await Promise.all([
         compressImage(file, maxW, q),
         onThumb ? compressImage(file, 400, 0.55) : Promise.resolve(null),
@@ -769,7 +813,6 @@ function makeSlot(uid, label, initB64, onDone, isBaseline, onThumb) {
   wrap.addEventListener('drop', e => {
     e.preventDefault();
     wrap.classList.remove('drag-over');
-    // dataTransfer.files can be empty when dragging from Photos.app on Mac
     let file = e.dataTransfer.files[0];
     if (!file && e.dataTransfer.items?.length) {
       for (const item of e.dataTransfer.items) {
@@ -784,7 +827,7 @@ function makeSlot(uid, label, initB64, onDone, isBaseline, onThumb) {
   wrap.appendChild(lbl);
   wrap.appendChild(btn);
   wrap.appendChild(input);
-  if (initB64) setImg(initB64); // must be after plus is in the DOM
+  if (initB64) setImg(initB64);
   return wrap;
 }
 
@@ -793,7 +836,6 @@ async function gradePhotos() {
   const boy = S.boy, day = S.day;
   const hasBath = isBathDay(boy, day);
 
-  // Check baselines
   for (const sl of BASE_ROOM) {
     if (!S.baselines[`${boy}|${sl.id}`]) { showMsg(`Missing ${boy} baseline: ${sl.label}`,'warn'); return; }
   }
@@ -802,7 +844,6 @@ async function gradePhotos() {
       if (!S.baselines[`shared|${sl.id}`]) { showMsg(`Missing bathroom baseline: ${sl.label}`,'warn'); return; }
     }
   }
-  // Check daily photos
   for (const sl of DAILY_ROOM) {
     if (!S.photos[sl.id]) { showMsg(`Add ${sl.label} first`,'warn'); return; }
   }
@@ -815,19 +856,16 @@ async function gradePhotos() {
   S.grading = true; S.gradePct = 10; S.result = null; S.msg = '';
   render();
 
-  const myToken = ++gradingToken; // snapshot — if user navigates away, gradingToken will differ
-  // Keep S.thumbs intact during grading — they were populated at upload time
+  const myToken = ++gradingToken;
 
   try {
     const content = [];
 
-    // Context — difficulty-aware
     const diff = DIFFICULTY[S.difficulty - 1];
     content.push({ type:'text', text:
       `You are grading ${boy}'s room for ${day}. Difficulty level: ${diff.level}/5 (${diff.label}). Use a ${diff.lens}.\n\nCRITICAL: Compare each current photo directly against the matching baseline. Items present in the baseline photo (furniture, cables, bean bags, decor, permanent desk items, etc.) are NEVER penalized — they are part of the room's normal state. Only deduct for items that appear ADDED or WORSENED relative to baseline.`
     });
 
-    // Bedroom baselines
     content.push({ type:'text', text:`--- ${boy.toUpperCase()} BEDROOM BASELINES ---` });
     for (const sl of BASE_ROOM) {
       const b64 = S.baselines[`${boy}|${sl.id}`];
@@ -835,7 +873,6 @@ async function gradePhotos() {
       content.push({ type:'image', source:{ type:'base64', media_type: b64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg', data: b64.split(',')[1] } });
     }
 
-    // Bathroom baselines
     if (hasBath) {
       content.push({ type:'text', text:`--- SHARED BATHROOM BASELINES ---` });
       for (const sl of BASE_BATH) {
@@ -847,7 +884,6 @@ async function gradePhotos() {
 
     S.gradePct = 30; render();
 
-    // Today's bedroom
     content.push({ type:'text', text:`--- TODAY'S BEDROOM PHOTOS ---` });
     for (const sl of DAILY_ROOM) {
       const b64 = S.photos[sl.id];
@@ -855,7 +891,6 @@ async function gradePhotos() {
       content.push({ type:'image', source:{ type:'base64', media_type: b64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg', data: b64.split(',')[1] } });
     }
 
-    // Today's bathroom
     if (hasBath) {
       content.push({ type:'text', text:`--- TODAY'S BATHROOM PHOTOS ---` });
       for (const sl of DAILY_BATH) {
@@ -867,7 +902,6 @@ async function gradePhotos() {
 
     S.gradePct = 55; render();
 
-    // Scoring instructions — difficulty-aware
     const bathSection = hasBath
       ? `\nBathroom (graded today because it's ${boy}'s bathroom day):\n- sink: 0–12 pts (${diff.sink})\n- towels: 0–8 pts (${diff.towels})\n- counter: 0–10 pts (${diff.counter})`
       : '';
@@ -893,7 +927,6 @@ async function gradePhotos() {
     const data = await res.json();
     const raw = data.text || '';
 
-    // Three-tier JSON parse
     let parsed = null;
     try { parsed = JSON.parse(raw); } catch(_) {
       try {
@@ -910,12 +943,12 @@ async function gradePhotos() {
       }
     }
 
-    if (myToken !== gradingToken) return; // user navigated away — discard stale result
+    if (myToken !== gradingToken) return;
     S.result = parsed; S.gradePct = 100; S.grading = false;
     showMsg('Grading complete!', 'ok');
 
   } catch(e) {
-    if (myToken !== gradingToken) return; // user navigated away — suppress stale error
+    if (myToken !== gradingToken) return;
     S.grading = false; S.gradePct = 0;
     showMsg(e.message || 'Grading failed', 'err');
   }
@@ -926,53 +959,30 @@ function saveResult() {
   const r = S.result;
   const boy = S.boy, day = S.day;
   const hasBath = isBathDay(boy, day);
-  const entry = {
-    hasBath,
-    floor:  r.floor?.s  ?? 0,
-    desk:   r.desk?.s   ?? 0,
-    trash:  r.trash?.s  ?? 0,
-  };
-  if (hasBath) {
-    entry.sink    = r.sink?.s    ?? 0;
-    entry.towels  = r.towels?.s  ?? 0;
-    entry.counter = r.counter?.s ?? 0;
-  }
+  const entry = { hasBath, floor: r.floor?.s??0, desk: r.desk?.s??0, trash: r.trash?.s??0 };
+  if (hasBath) { entry.sink = r.sink?.s??0; entry.towels = r.towels?.s??0; entry.counter = r.counter?.s??0; }
+  if (!S.scores[boy]) S.scores[boy] = {};
   S.scores[boy][day] = entry;
-  S.savedPhotos[boy][day] = { ...S.thumbs }; // store thumbnails (tiny) not full-res
-  saveScores();
-  savePhotos();
-  S.result = null;
-  S.regrade = false;
-  S.photos = {};
-  S.thumbs = {};
+  if (!S.savedPhotos[boy]) S.savedPhotos[boy] = {};
+  S.savedPhotos[boy][day] = { ...S.thumbs };
+  saveScores(); savePhotos();
+  S.result = null; S.regrade = false; S.photos = {}; S.thumbs = {};
   showMsg(`${boy}'s ${day} saved!`, 'ok');
 }
 
-// Silently save any pending result before navigating away (no toast message)
 function autoSave() {
   if (!S.result) return;
   const r = S.result;
   const boy = S.boy, day = S.day;
   const hasBath = isBathDay(boy, day);
-  const entry = {
-    hasBath,
-    floor:  r.floor?.s  ?? 0,
-    desk:   r.desk?.s   ?? 0,
-    trash:  r.trash?.s  ?? 0,
-  };
-  if (hasBath) {
-    entry.sink    = r.sink?.s    ?? 0;
-    entry.towels  = r.towels?.s  ?? 0;
-    entry.counter = r.counter?.s ?? 0;
-  }
+  const entry = { hasBath, floor: r.floor?.s??0, desk: r.desk?.s??0, trash: r.trash?.s??0 };
+  if (hasBath) { entry.sink = r.sink?.s??0; entry.towels = r.towels?.s??0; entry.counter = r.counter?.s??0; }
+  if (!S.scores[boy]) S.scores[boy] = {};
   S.scores[boy][day] = entry;
-  S.savedPhotos[boy][day] = { ...S.thumbs }; // store thumbnails (tiny) not full-res
-  saveScores();
-  savePhotos();
-  S.result = null;
-  S.regrade = false;
-  S.photos = {};
-  S.thumbs = {};
+  if (!S.savedPhotos[boy]) S.savedPhotos[boy] = {};
+  S.savedPhotos[boy][day] = { ...S.thumbs };
+  saveScores(); savePhotos();
+  S.result = null; S.regrade = false; S.photos = {}; S.thumbs = {};
 }
 
 // ─── Backup / Restore ────────────────────────────────────────────────────────
@@ -983,9 +993,7 @@ function backupBaselines() {
   const a = document.createElement('a');
   a.href = url; a.download = 'room-baselines.json';
   a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
   showMsg('Baselines downloaded', 'ok');
 }
@@ -1023,11 +1031,9 @@ function renderTabs() {
     const label = document.createElement('span'); label.textContent = t;
     b.appendChild(icon); b.appendChild(label);
     b.onclick = () => {
-      autoSave();                          // persist pending grade before leaving
-      gradingToken++;                      // invalidate any in-flight API call
+      autoSave();
+      gradingToken++;
       S.grading = false; S.gradePct = 0;
-      // Photos are scoped to (boy, day) and cleared on boy/day change or after
-      // grading completes. Don't wipe them on tab nav — that loses pre-grade uploads.
       S.tab = t.toLowerCase(); S.msg = ''; render();
     };
     el.appendChild(b);
@@ -1079,28 +1085,140 @@ function renderSetup(el) {
   // Weekly Allowance maximum
   const allowSetCard = mkCard('Weekly Allowance Maximum');
   const allowSetRow = document.createElement('div');
-  allowSetRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:10px;';
+  allowSetRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:0 16px';
   const dollarSign = document.createElement('span');
   dollarSign.style.cssText = 'font-size:26px;font-weight:700;color:var(--text);line-height:1;';
   dollarSign.textContent = '$';
   const allowInp = document.createElement('input');
   allowInp.type = 'number'; allowInp.min = '0'; allowInp.max = '500'; allowInp.step = '5';
   allowInp.value = S.maxAllowance;
-  allowInp.style.cssText = 'width:110px;font-size:26px;font-weight:700;text-align:center;';
+  allowInp.style.cssText = 'width:110px;font-size:26px;font-weight:700;text-align:center;padding:0';
   allowInp.oninput = () => {
     const v = parseFloat(allowInp.value);
-    if (!isNaN(v) && v >= 0) { S.maxAllowance = v; saveMaxAllowance(); render(); }
+    if (!isNaN(v) && v >= 0) { S.maxAllowance = v; saveMaxAllowance(); }
+    // No render() — avoids resetting the children add-form state
   };
   allowSetRow.appendChild(dollarSign);
   allowSetRow.appendChild(allowInp);
   allowSetCard.appendChild(allowSetRow);
   const allowSetHint = document.createElement('div');
   allowSetHint.className = 'hint';
-  allowSetHint.textContent = 'Maximum payout at 90%+ weekly score. Lower tiers are automatically calculated as a percentage of this amount.';
+  allowSetHint.textContent = 'Maximum payout at 90%+ weekly score. Lower tiers are automatically calculated.';
   allowSetCard.appendChild(allowSetHint);
   el.appendChild(allowSetCard);
 
-  // Baseline photo sections
+  // ── Children Management ──
+  const childCard = mkCard('Children');
+
+  if (S.children.length > 0) {
+    S.children.forEach((child, idx) => {
+      const row = document.createElement('div');
+      row.className = 'child-row';
+
+      const dot = document.createElement('span');
+      dot.className = 'child-dot';
+      dot.style.background = child.color;
+      row.appendChild(dot);
+
+      const nameEl = document.createElement('span');
+      nameEl.className = 'child-name';
+      nameEl.textContent = child.name;
+      row.appendChild(nameEl);
+
+      const bathEl = document.createElement('span');
+      bathEl.className = 'child-bath';
+      bathEl.textContent = child.bathDays.length > 0
+        ? '🛁 ' + child.bathDays.join(', ')
+        : 'No bath days';
+      row.appendChild(bathEl);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'btn btn-ghost btn-sm';
+      removeBtn.style.cssText = 'color:var(--err);flex-shrink:0';
+      removeBtn.textContent = 'Remove';
+      removeBtn.onclick = () => {
+        if (!confirm(`Remove ${child.name}? Their scores and baselines will be deleted.`)) return;
+        DAYS.forEach(d => _deletePhoto(child.name, d));
+        delete S.scores[child.name];
+        delete S.savedPhotos[child.name];
+        BASE_ROOM.forEach(sl => delete S.baselines[`${child.name}|${sl.id}`]);
+        S.children.splice(idx, 1);
+        if (S.boy === child.name) {
+          S.boy = S.children[0]?.name || '';
+          S.result = null; S.regrade = false; S.photos = {}; S.thumbs = {};
+          gradingToken++; S.grading = false; S.gradePct = 0;
+        }
+        saveChildren(); saveScores(); saveBaselines();
+        showMsg(`${child.name} removed`, 'info');
+      };
+      row.appendChild(removeBtn);
+      childCard.appendChild(row);
+    });
+  }
+
+  // Add-child form
+  const addForm = document.createElement('div');
+  addForm.className = 'child-add-form';
+
+  const nameInp = document.createElement('input');
+  nameInp.type = 'text';
+  nameInp.placeholder = "Child's name";
+  nameInp.value = S.pendingChildName;
+  nameInp.style.cssText = 'border-bottom:1.5px solid var(--sep);padding:8px 0;font-size:17px;margin-bottom:12px;';
+  nameInp.oninput = () => { S.pendingChildName = nameInp.value; };  // no render()
+
+  const bathLbl = document.createElement('div');
+  bathLbl.style.cssText = 'font-size:13px;color:var(--muted);margin-bottom:6px;';
+  bathLbl.textContent = 'Bath days';
+
+  const bathRow = document.createElement('div');
+  bathRow.className = 'bath-day-row';
+  DAYS.forEach(d => {
+    const btn = document.createElement('button');
+    btn.className = 'bath-day-btn' + (S.pendingBathDays.includes(d) ? ' on' : '');
+    btn.textContent = d;
+    btn.onclick = () => {
+      if (S.pendingBathDays.includes(d)) {
+        S.pendingBathDays = S.pendingBathDays.filter(x => x !== d);
+        btn.classList.remove('on');
+      } else {
+        S.pendingBathDays.push(d);
+        btn.classList.add('on');
+      }
+    };
+    bathRow.appendChild(btn);
+  });
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'btn btn-primary btn-full';
+  addBtn.style.marginTop = '12px';
+  addBtn.textContent = '+ Add Child';
+  addBtn.onclick = () => {
+    const name = S.pendingChildName.trim();
+    if (!name) { showMsg('Enter a name first', 'warn'); return; }
+    if (S.children.find(c => c.name.toLowerCase() === name.toLowerCase())) {
+      showMsg(`"${name}" already exists`, 'warn'); return;
+    }
+    const color = CHILD_COLORS[S.children.length % CHILD_COLORS.length];
+    const newChild = { name, color, bathDays: [...S.pendingBathDays] };
+    S.children.push(newChild);
+    S.scores[name] = {};
+    S.savedPhotos[name] = {};
+    if (!S.boy) S.boy = name;
+    S.pendingChildName = '';
+    S.pendingBathDays = [];
+    saveChildren();
+    showMsg(`${name} added!`, 'ok');
+  };
+
+  addForm.appendChild(nameInp);
+  addForm.appendChild(bathLbl);
+  addForm.appendChild(bathRow);
+  addForm.appendChild(addBtn);
+  childCard.appendChild(addForm);
+  el.appendChild(childCard);
+
+  // Baseline photo sections — one card per child + shared bathroom
   function makeBaseCard(title, slots, prefix) {
     const card = mkCard(title);
     const grid = document.createElement('div');
@@ -1114,14 +1232,15 @@ function renderSetup(el) {
     return card;
   }
 
-  el.appendChild(makeBaseCard("Wesley's Bedroom Baselines", BASE_ROOM, 'Wesley'));
-  el.appendChild(makeBaseCard("Walker's Bedroom Baselines", BASE_ROOM, 'Walker'));
-  el.appendChild(makeBaseCard('Shared Bathroom Baselines',  BASE_BATH, 'shared'));
+  S.children.forEach(child => {
+    el.appendChild(makeBaseCard(`${child.name}'s Bedroom Baselines`, BASE_ROOM, child.name));
+  });
+  el.appendChild(makeBaseCard('Shared Bathroom Baselines', BASE_BATH, 'shared'));
 
   // Backup / Restore
   const bCard = mkCard('Backup & Restore');
   const bRow = document.createElement('div');
-  bRow.className = 'row wrap';
+  bRow.className = 'row wrap'; bRow.style.padding = '4px 16px 12px'; bRow.style.gap = '10px';
   const bBtn = document.createElement('button');
   bBtn.className = 'btn btn-ghost'; bBtn.textContent = 'Download Baselines';
   bBtn.onclick = backupBaselines;
@@ -1137,7 +1256,7 @@ function renderSetup(el) {
   el.appendChild(bCard);
 }
 
-// ── Saved score view (already-graded day) ──
+// ── Saved score view ──
 function renderSavedScore(el, entry) {
   const boy = S.boy, day = S.day;
   const hasBath = !!entry.hasBath;
@@ -1145,7 +1264,6 @@ function renderSavedScore(el, entry) {
 
   const sec = mkCard(`Saved Score — ${boy} / ${day}`);
 
-  // ── Photos from this day ──────────────────────────────────
   const dayPhotos = S.savedPhotos[boy]?.[day] || {};
   if (Object.keys(dayPhotos).length > 0) {
     const needSlots = [...DAILY_ROOM, ...(hasBath ? DAILY_BATH : [])];
@@ -1173,7 +1291,6 @@ function renderSavedScore(el, entry) {
     }
   }
 
-  // ── Scores ────────────────────────────────────────────────
   const rTot = cats.reduce((s,c) => s + (entry[c.key] ?? 0), 0);
   const maxPts = hasBath ? 90 : 60;
   const totDiv = document.createElement('div'); totDiv.className = 'score-total';
@@ -1203,19 +1320,33 @@ function renderSavedScore(el, entry) {
 
 // ── Grade tab ──
 function renderGrade(el) {
-  // Boy selector — iOS segmented control
+  // Guard: ensure S.boy is valid
+  if (!getChild(S.boy) && S.children.length > 0) S.boy = S.children[0].name;
+
+  if (S.children.length === 0) {
+    const empty = mkCard('No Children Added');
+    const hint = document.createElement('div');
+    hint.className = 'hint';
+    hint.textContent = 'Go to Setup to add your children first.';
+    empty.appendChild(hint);
+    el.appendChild(empty);
+    return;
+  }
+
+  // Segmented control — one segment per child
   const segCtrl = document.createElement('div');
   segCtrl.className = 'seg-control';
-  ['Wesley','Walker'].forEach(b => {
+  S.children.forEach(child => {
     const btn = document.createElement('button');
-    const isOn = S.boy === b;
-    btn.className = 'seg-btn' + (isOn ? (b==='Wesley' ? ' on-wes' : ' on-wal') : '');
-    btn.textContent = b;
+    const isOn = S.boy === child.name;
+    btn.className = 'seg-btn' + (isOn ? ' on-child' : '');
+    if (isOn) btn.style.color = child.color;
+    btn.textContent = child.name;
     btn.onclick = () => {
-      if (S.boy === b) return;
+      if (S.boy === child.name) return;
       autoSave();
       gradingToken++; S.grading = false; S.gradePct = 0;
-      S.boy = b; S.photos = {}; S.thumbs = {}; S.result = null; S.regrade = false; render();
+      S.boy = child.name; S.photos = {}; S.thumbs = {}; S.result = null; S.regrade = false; render();
     };
     segCtrl.appendChild(btn);
   });
@@ -1227,12 +1358,12 @@ function renderGrade(el) {
   dayRow.className = 'day-row';
   DAYS.forEach(d => {
     const btn = document.createElement('button');
-    const hasDone = !!S.scores[S.boy][d];
+    const hasDone = !!(S.scores[S.boy] || {})[d];
     btn.className = 'day-pill' + (S.day===d ? ' on' : '') + (hasDone ? ' done' : '');
     btn.textContent = d;
     btn.onclick = () => {
       if (S.day === d) return;
-      autoSave();                          // persist pending grade before switching day
+      autoSave();
       gradingToken++; S.grading = false; S.gradePct = 0;
       S.day = d; S.photos = {}; S.thumbs = {}; S.result = null; S.regrade = false; render();
     };
@@ -1240,8 +1371,7 @@ function renderGrade(el) {
   });
   dayCard.appendChild(dayRow);
 
-  // If this day already has a saved score and we're not in re-grade mode, show it
-  if (S.scores[S.boy][S.day] && !S.regrade && !S.result) {
+  if ((S.scores[S.boy] || {})[S.day] && !S.regrade && !S.result) {
     const hasBath2 = isBathDay(S.boy, S.day);
     const bathInfo2 = document.createElement('div');
     bathInfo2.style.cssText = 'font-size:13px;color:var(--muted);margin-top:10px';
@@ -1305,18 +1435,16 @@ function renderGrade(el) {
     pCard.appendChild(pLbl);
     el.appendChild(pCard);
   } else {
-    // Build checklist of what's ready vs missing
     const needSlots = [...DAILY_ROOM, ...(hasBath ? DAILY_BATH : [])];
-    const missing = needSlots.filter(sl => !S.photos[sl.id]);
 
+    const childColor = getChild(S.boy)?.color || 'var(--accent)';
     const gradeBtn = document.createElement('button');
-    gradeBtn.className = 'btn btn-primary btn-full';
-    gradeBtn.style.cssText = 'margin: 0 16px 8px; width: calc(100% - 32px);';
+    gradeBtn.className = 'btn btn-full';
+    gradeBtn.style.cssText = `margin: 0 16px 8px; width: calc(100% - 32px); background:${childColor}; color:#fff; padding:13px 20px; border-radius:14px; font-size:17px; font-weight:600; cursor:pointer; border:none;`;
     gradeBtn.textContent = `Grade ${S.boy}'s Room`;
     gradeBtn.onclick = gradePhotos;
     el.appendChild(gradeBtn);
 
-    // Photo checklist
     const checkRow = document.createElement('div');
     checkRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px';
     needSlots.forEach(sl => {
@@ -1329,7 +1457,6 @@ function renderGrade(el) {
     el.appendChild(checkRow);
   }
 
-  // Result
   if (S.result) renderResult(el, S.result);
 }
 
@@ -1340,7 +1467,6 @@ function renderResult(el, result) {
 
   const sec = mkCard(`Result — ${boy} / ${day}`);
 
-  // Total
   const rTot = cats.reduce((s,c) => s + (result[c.key]?.s ?? 0), 0);
   const maxPts = hasBath ? 90 : 60;
   const totDiv = document.createElement('div'); totDiv.className = 'score-total';
@@ -1348,9 +1474,7 @@ function renderResult(el, result) {
     <div class="score-total-num">${rTot}<span class="score-total-denom"> / ${maxPts}</span></div>`;
   sec.appendChild(totDiv);
 
-  // Category grid
-  const grid = document.createElement('div');
-  grid.className = 'score-grid';
+  const grid = document.createElement('div'); grid.className = 'score-grid';
   cats.forEach(cat => {
     const s = result[cat.key]?.s ?? 0;
     const n = result[cat.key]?.n || '';
@@ -1362,7 +1486,6 @@ function renderResult(el, result) {
   });
   sec.appendChild(grid);
 
-  // Actions
   const saveBtn = document.createElement('button');
   saveBtn.className = 'btn btn-primary btn-full';
   saveBtn.style.marginTop = '14px';
@@ -1382,7 +1505,16 @@ function renderResult(el, result) {
 
 // ── Summary tab ──
 function renderSummary(el) {
-  // Print button — hidden in @media print itself
+  if (S.children.length === 0) {
+    const empty = mkCard('No Children Added');
+    const hint = document.createElement('div');
+    hint.className = 'hint';
+    hint.textContent = 'Go to Setup to add your children first.';
+    empty.appendChild(hint);
+    el.appendChild(empty);
+    return;
+  }
+
   const printBtn = document.createElement('button');
   printBtn.className = 'btn btn-ghost btn-full no-print';
   printBtn.style.marginBottom = '14px';
@@ -1393,12 +1525,17 @@ function renderSummary(el) {
   const sumGrid = document.createElement('div');
   sumGrid.className = 'sum-grid';
 
-  ['Wesley','Walker'].forEach(boy => {
+  S.children.forEach(child => {
+    const boy = child.name;
     const w = calcWeekly(boy);
     const card = document.createElement('div');
-    card.className = `sum-card ${boy === 'Wesley' ? 'wes' : 'wal'}`;
+    card.className = 'sum-card';
+    card.style.setProperty('--child-color', child.color); // used in print CSS for border
 
-    const name = document.createElement('div'); name.className = 'sum-name'; name.textContent = boy;
+    const name = document.createElement('div');
+    name.className = 'sum-name';
+    name.style.color = child.color;
+    name.textContent = boy;
     card.appendChild(name);
 
     if (!w) {
@@ -1406,7 +1543,7 @@ function renderSummary(el) {
       card.appendChild(emp);
     } else {
       const allWeekGraded = w.daysGraded === w.totalDays;
-      const displayPct = w.projPct; // projected full-week score; equals pct when all days graded
+      const displayPct = w.projPct;
 
       const pts = document.createElement('div'); pts.className = 'sum-pts';
       pts.innerHTML = `${displayPct}<span style="font-size:22px;color:var(--muted)">%</span>`;
@@ -1431,13 +1568,14 @@ function renderSummary(el) {
   });
   el.appendChild(sumGrid);
 
-  // Per-boy day breakdown — wrapped so print can put them side by side
+  // Per-child day breakdown
   const breakdownWrap = document.createElement('div');
   breakdownWrap.className = 'breakdown-wrap';
 
-  ['Wesley','Walker'].forEach(boy => {
+  S.children.forEach(child => {
+    const boy = child.name;
     const card = mkCard(`${boy} — Daily Breakdown`);
-    const entries = Object.entries(S.scores[boy])
+    const entries = Object.entries(S.scores[boy] || {})
       .sort((a,b) => DAYS.indexOf(a[0]) - DAYS.indexOf(b[0]));
 
     if (!entries.length) {
@@ -1479,7 +1617,7 @@ function renderSummary(el) {
   });
   el.appendChild(breakdownWrap);
 
-  // Allowance scale reference — dynamically reflects configured maximum
+  // Allowance scale reference
   const m = S.maxAllowance || 50;
   const scaleCard = mkCard(`Allowance Scale (max $${Math.round(m)})`);
   const scaleTiers = [
@@ -1498,7 +1636,7 @@ function renderSummary(el) {
   });
   el.appendChild(scaleCard);
 
-  // Week Management — per-boy clear + full reset (hidden on print)
+  // Week Management
   const resetCard = mkCard('Week Management');
   resetCard.classList.add('no-print');
   const hint = document.createElement('div');
@@ -1507,42 +1645,44 @@ function renderSummary(el) {
   resetCard.appendChild(hint);
 
   const btnRow = document.createElement('div');
-  btnRow.className = 'row wrap'; btnRow.style.gap = '10px';
+  btnRow.className = 'row wrap'; btnRow.style.gap = '10px'; btnRow.style.padding = '0 16px 8px';
 
-  ['Wesley','Walker'].forEach(boy => {
+  S.children.forEach(child => {
     const btn = document.createElement('button');
     btn.className = 'btn btn-danger';
-    btn.textContent = `Clear ${boy}'s Week`;
+    btn.textContent = `Clear ${child.name}'s Week`;
     btn.onclick = () => {
-      if (confirm(`Confirm clear ${boy}'s week?`)) {
-        DAYS.forEach(d => _deletePhoto(boy, d));
-        S.scores[boy] = {};
-        S.savedPhotos[boy] = {};
-        if (S.boy === boy) { S.result = null; S.regrade = false; S.photos = {}; S.thumbs = {}; gradingToken++; S.grading = false; S.gradePct = 0; }
-        saveScores();
-        showMsg(`${boy}'s week cleared!`, 'ok');
+      if (!confirm(`Confirm clear ${child.name}'s week?`)) return;
+      DAYS.forEach(d => _deletePhoto(child.name, d));
+      S.scores[child.name] = {};
+      S.savedPhotos[child.name] = {};
+      if (S.boy === child.name) {
+        S.result = null; S.regrade = false; S.photos = {}; S.thumbs = {};
+        gradingToken++; S.grading = false; S.gradePct = 0;
       }
+      saveScores();
+      showMsg(`${child.name}'s week cleared!`, 'ok');
     };
     btnRow.appendChild(btn);
   });
 
-  const resetAllBtn = document.createElement('button');
-  resetAllBtn.className = 'btn btn-ghost';
-  resetAllBtn.style.borderColor = 'var(--err)';
-  resetAllBtn.style.color = 'var(--err)';
-  resetAllBtn.textContent = 'Clear Both';
-  resetAllBtn.onclick = () => {
-    if (confirm('Confirm clear both boys\' weeks?')) {
-      ['Wesley','Walker'].forEach(boy => DAYS.forEach(d => _deletePhoto(boy, d)));
-      S.scores = { Wesley:{}, Walker:{} };
-      S.savedPhotos = { Wesley:{}, Walker:{} };
+  if (S.children.length > 1) {
+    const resetAllBtn = document.createElement('button');
+    resetAllBtn.className = 'btn btn-ghost';
+    resetAllBtn.style.cssText = 'border-color:var(--err);color:var(--err)';
+    resetAllBtn.textContent = 'Clear All';
+    resetAllBtn.onclick = () => {
+      if (!confirm('Confirm clear all weeks?')) return;
+      S.children.forEach(c => DAYS.forEach(d => _deletePhoto(c.name, d)));
+      S.children.forEach(c => { S.scores[c.name] = {}; S.savedPhotos[c.name] = {}; });
       S.result = null; S.regrade = false; S.photos = {}; S.thumbs = {};
       gradingToken++; S.grading = false; S.gradePct = 0;
       saveScores();
-      showMsg('Both weeks cleared!', 'ok');
-    }
-  };
-  btnRow.appendChild(resetAllBtn);
+      showMsg('All weeks cleared!', 'ok');
+    };
+    btnRow.appendChild(resetAllBtn);
+  }
+
   resetCard.appendChild(btnRow);
   el.appendChild(resetCard);
 }
@@ -1567,10 +1707,10 @@ async function init() {
   if (legacy) {
     try {
       const p = JSON.parse(legacy);
-      ['Wesley','Walker'].forEach(boy => {
-        Object.entries(p[boy] || {}).forEach(([day, photos]) => {
-          S.savedPhotos[boy][day] = photos;
-          _putPhoto(boy, day, photos);
+      S.children.forEach(c => {
+        Object.entries(p[c.name] || {}).forEach(([day, photos]) => {
+          S.savedPhotos[c.name][day] = photos;
+          _putPhoto(c.name, day, photos);
         });
       });
       localStorage.removeItem('rsc_photos_v1');
@@ -1579,8 +1719,8 @@ async function init() {
 
   // Load photos from IndexedDB (async)
   const stored = await _loadAllPhotos();
-  ['Wesley','Walker'].forEach(boy => {
-    Object.assign(S.savedPhotos[boy], stored[boy]);
+  S.children.forEach(c => {
+    Object.assign(S.savedPhotos[c.name], stored[c.name] || {});
   });
 
   render();
