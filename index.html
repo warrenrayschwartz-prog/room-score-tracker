@@ -5,323 +5,336 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>Room Score Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:      #0d0d11;
-      --surf:    #17171f;
-      --surf2:   #1f1f2a;
-      --border:  #2a2a3a;
-      --accent:  #7c6fff;
-      --text:    #e8e8f0;
-      --muted:   #7777aa;
-      --ok:      #4ade80;
-      --warn:    #facc15;
-      --err:     #f87171;
-      --info:    #60a5fa;
-      --wes:     #7c6fff;
-      --wal:     #ff6b8a;
+      --bg:     #F2F2F7;
+      --surf:   #FFFFFF;
+      --surf2:  #F2F2F7;
+      --sep:    rgba(60,60,67,0.18);
+      --accent: #007AFF;
+      --text:   #000000;
+      --text2:  #3C3C43;
+      --muted:  #8E8E93;
+      --ok:     #34C759;
+      --warn:   #FF9500;
+      --err:    #FF3B30;
+      --info:   #32ADE6;
+      --wes:    #5856D6;
+      --wal:    #FF2D55;
     }
 
     body {
-      font-family: 'DM Sans', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
-      font-size: 15px;
+      font-size: 17px;
       -webkit-text-size-adjust: 100%;
+      padding-bottom: calc(49px + env(safe-area-inset-bottom, 0px) + 12px);
     }
 
-    /* ── Header ── */
+    /* ── Navigation Bar ── */
     .hdr {
-      background: var(--surf);
-      border-bottom: 1px solid var(--border);
-      padding: 14px 20px;
-      display: flex;
-      align-items: baseline;
-      gap: 14px;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      border-bottom: 0.5px solid rgba(60,60,67,0.29);
+      padding: 13px 16px 11px;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
     .hdr-title {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 26px;
-      letter-spacing: 2px;
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.4px;
+      color: var(--text);
     }
-    .hdr-sub {
-      font-size: 12px;
-      color: var(--muted);
-    }
+    .hdr-sub { display: none; }
 
-    /* ── Tabs ── */
+    /* ── Tab Bar — fixed bottom, iOS style ── */
     .tabs {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
       display: flex;
-      background: var(--surf);
-      border-bottom: 1px solid var(--border);
-      padding: 0 20px;
-      gap: 2px;
+      background: rgba(249,249,249,0.94);
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      border-top: 0.5px solid rgba(60,60,67,0.29);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      z-index: 200;
     }
     .tab {
-      padding: 11px 18px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 5px 0 4px;
+      min-height: 49px;
       border: none;
       background: none;
       color: var(--muted);
-      font-family: 'DM Sans', sans-serif;
-      font-size: 14px;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 10px;
       font-weight: 500;
       cursor: pointer;
-      border-bottom: 2px solid transparent;
-      margin-bottom: -1px;
-      transition: color .15s, border-color .15s;
-      letter-spacing: .3px;
+      gap: 2px;
+      letter-spacing: 0;
+      transition: color 0.1s;
+      border-bottom: none;
+      margin-bottom: 0;
     }
-    .tab.on { color: var(--text); border-bottom-color: var(--accent); }
-    .tab:hover:not(.on) { color: var(--text); }
+    .tab-icon { font-size: 24px; line-height: 1; }
+    .tab.on { color: var(--accent); }
+    .tab:hover:not(.on) { color: var(--text2); }
 
     /* ── Content ── */
-    .page { padding: 20px; max-width: 680px; margin: 0 auto; }
+    .page { padding: 8px 0 16px; max-width: 680px; margin: 0 auto; }
 
-    /* ── Section card ── */
+    /* ── Cards ── */
     .card {
       background: var(--surf);
-      border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 18px;
-      margin-bottom: 16px;
+      margin: 0 16px 10px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
     }
     .card-title {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 15px;
-      letter-spacing: 1.5px;
+      font-size: 13px;
+      font-weight: 400;
       color: var(--muted);
-      margin-bottom: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      padding: 20px 16px 6px;
+      margin: 0 0 0 0;
+      background: transparent;
+      /* renders ABOVE the card — mkCard injects into card but we style it as section header */
     }
 
-    /* ── Form ── */
-    input[type="password"], input[type="text"] {
+    /* ── Form inputs ── */
+    input[type="password"], input[type="text"], input[type="number"] {
       width: 100%;
-      padding: 10px 13px;
-      background: var(--surf2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
+      padding: 11px 16px;
+      background: transparent;
+      border: none;
       color: var(--text);
-      font-family: 'DM Sans', sans-serif;
-      font-size: 14px;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 17px;
       outline: none;
     }
-    input:focus { border-color: var(--accent); }
+    input::placeholder { color: var(--muted); }
 
     /* ── Buttons ── */
     .btn {
-      padding: 10px 20px;
+      padding: 13px 20px;
       border: none;
-      border-radius: 8px;
-      font-family: 'DM Sans', sans-serif;
-      font-size: 14px;
-      font-weight: 500;
+      border-radius: 14px;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 17px;
+      font-weight: 600;
       cursor: pointer;
       transition: opacity .15s, transform .1s;
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 6px;
+      letter-spacing: -0.2px;
     }
-    .btn:active { transform: scale(.97); }
+    .btn:active { transform: scale(.97); opacity: 0.85; }
     .btn:disabled { opacity: .38; cursor: not-allowed; transform: none; }
-    .btn-primary  { background: var(--accent); color: #fff; }
-    .btn-ghost    { background: var(--surf2); color: var(--text); border: 1px solid var(--border); }
-    .btn-danger   { background: var(--err); color: #fff; }
-    .btn-sm       { padding: 5px 12px; font-size: 12px; border-radius: 6px; }
-    .btn-full     { width: 100%; justify-content: center; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-ghost   { background: var(--surf); color: var(--accent); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .btn-danger  { background: var(--err); color: #fff; }
+    .btn-sm      { padding: 5px 12px; font-size: 13px; border-radius: 8px; }
+    .btn-full    { width: 100%; }
+    .btn-wrap    { padding: 0 16px 8px; }
 
-    /* ── Boy selector ── */
-    .boy-row { display: flex; gap: 10px; margin-bottom: 14px; }
-    .boy-btn {
+    /* ── Segmented Control (Wesley / Walker) ── */
+    .seg-control {
+      display: flex;
+      background: rgba(118,118,128,0.12);
+      border-radius: 9px;
+      padding: 2px;
+      margin: 8px 16px 4px;
+    }
+    .seg-btn {
       flex: 1;
-      padding: 11px;
-      border-radius: 10px;
-      border: 2px solid var(--border);
-      background: var(--surf2);
-      color: var(--muted);
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 22px;
-      letter-spacing: 1px;
+      padding: 7px 12px;
+      border-radius: 7px;
+      border: none;
+      background: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text2);
       cursor: pointer;
-      transition: all .15s;
+      transition: all 0.2s;
       text-align: center;
     }
-    .boy-btn.on-wes { border-color: var(--wes); color: var(--wes); background: rgba(124,111,255,.1); }
-    .boy-btn.on-wal { border-color: var(--wal); color: var(--wal); background: rgba(255,107,138,.1); }
+    .seg-btn.on-wes {
+      background: #fff;
+      color: var(--wes);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.14), 0 1px 1px rgba(0,0,0,0.06);
+    }
+    .seg-btn.on-wal {
+      background: #fff;
+      color: var(--wal);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.14), 0 1px 1px rgba(0,0,0,0.06);
+    }
 
     /* ── Day pills ── */
-    .day-row { display: flex; gap: 7px; flex-wrap: wrap; }
+    .day-row {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 8px 16px 4px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .day-row::-webkit-scrollbar { display: none; }
     .day-pill {
+      flex-shrink: 0;
       position: relative;
-      padding: 7px 14px;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      background: var(--surf2);
-      color: var(--muted);
-      font-family: 'DM Sans', sans-serif;
-      font-size: 13px;
+      padding: 7px 18px;
+      border-radius: 20px;
+      border: none;
+      background: var(--surf);
+      color: var(--text2);
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 15px;
       font-weight: 500;
       cursor: pointer;
       transition: all .15s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }
-    .day-pill.on   { border-color: var(--accent); color: var(--text); background: rgba(124,111,255,.15); }
+    .day-pill.on   { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(0,122,255,0.35); }
     .day-pill.done::after {
       content: '';
       position: absolute;
-      top: -3px; right: -3px;
-      width: 8px; height: 8px;
+      top: -2px; right: -2px;
+      width: 9px; height: 9px;
       border-radius: 50%;
       background: var(--ok);
-      border: 1px solid var(--bg);
+      border: 1.5px solid var(--bg);
     }
 
     /* ── Photo grid ── */
     .slot-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 8px;
+      padding: 8px 16px 16px;
     }
     .slot {
       position: relative;
       aspect-ratio: 4/3;
-      border-radius: 8px;
+      border-radius: 10px;
       overflow: hidden;
-      background: var(--surf2);
-      border: 1.5px dashed var(--border);
+      background: var(--bg);
       cursor: pointer;
-      transition: border-color .15s;
+      transition: opacity .15s;
     }
-    .slot.drag-over { border-color: var(--accent); background: rgba(124,111,255,.07); }
-    .slot img {
-      position: absolute;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      object-fit: cover;
-    }
+    .slot.drag-over { opacity: 0.6; }
+    .slot img { position: absolute; top:0; left:0; width:100%; height:100%; object-fit: cover; }
     .slot-label {
       position: absolute;
-      bottom: 0; left: 0;
-      width: 100%;
-      background: rgba(0,0,0,.6);
-      padding: 4px 7px;
-      font-size: 11px;
-      color: #fff;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      bottom: 0; left: 0; width: 100%;
+      background: linear-gradient(transparent, rgba(0,0,0,0.55));
+      padding: 12px 8px 6px;
+      font-size: 11px; color: #fff; font-weight: 500;
     }
     .slot-plus {
-      position: absolute;
-      top: 50%; left: 50%;
+      position: absolute; top:50%; left:50%;
       transform: translate(-50%,-50%);
-      font-size: 30px;
-      color: var(--border);
-      pointer-events: none;
-      line-height: 1;
+      font-size: 28px; color: var(--muted);
+      pointer-events: none; line-height: 1;
     }
     .slot-btn {
-      position: absolute;
-      top: 0; left: 0;
+      position: absolute; top:0; left:0;
       width: 100%; height: 100%;
-      background: transparent;
-      border: none;
-      cursor: pointer;
+      background: transparent; border: none; cursor: pointer;
     }
 
     /* ── Messages ── */
     .msg {
-      padding: 10px 14px;
-      border-radius: 8px;
-      font-size: 13px;
-      margin-bottom: 14px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 14px;
+      margin: 0 16px 10px;
     }
-    .msg.ok   { background: rgba(74,222,128,.12); color: var(--ok);   border: 1px solid rgba(74,222,128,.25); }
-    .msg.warn { background: rgba(250,204,21,.12); color: var(--warn); border: 1px solid rgba(250,204,21,.25); }
-    .msg.err  { background: rgba(248,113,113,.12); color: var(--err); border: 1px solid rgba(248,113,113,.25); }
-    .msg.info { background: rgba(96,165,250,.12); color: var(--info); border: 1px solid rgba(96,165,250,.25); }
+    .msg.ok   { background: rgba(52,199,89,0.12);  color: #1c7a32; border: 1px solid rgba(52,199,89,0.3); }
+    .msg.warn { background: rgba(255,149,0,0.12);  color: #a65c00; border: 1px solid rgba(255,149,0,0.3); }
+    .msg.err  { background: rgba(255,59,48,0.12);  color: #cc1200; border: 1px solid rgba(255,59,48,0.3); }
+    .msg.info { background: rgba(0,122,255,0.10);  color: #005cc5; border: 1px solid rgba(0,122,255,0.25); }
 
     /* ── Progress bar ── */
-    .prog-wrap { height: 4px; background: var(--surf2); border-radius: 2px; overflow: hidden; margin-bottom: 14px; }
+    .prog-wrap { height: 4px; background: rgba(118,118,128,0.12); border-radius: 2px; overflow: hidden; margin: 0 16px 12px; }
     .prog-fill  { height: 100%; background: var(--accent); transition: width .4s; border-radius: 2px; }
 
     /* ── Score grid ── */
-    .score-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 8px;
-    }
+    .score-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding: 0 16px 16px; }
     .score-item {
-      background: var(--surf2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
+      background: var(--bg);
+      border-radius: 10px;
       padding: 10px 12px;
     }
-    .score-cat  { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 3px; }
-    .score-num  { font-family: 'Bebas Neue', sans-serif; font-size: 26px; line-height: 1; }
-    .score-max  { font-size: 12px; color: var(--muted); }
-    .score-note { font-size: 11px; color: var(--muted); margin-top: 3px; font-style: italic; line-height: 1.3; }
+    .score-cat  { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+    .score-num  { font-size: 26px; font-weight: 700; line-height: 1; letter-spacing: -0.5px; }
+    .score-max  { font-size: 12px; color: var(--muted); font-weight: 400; }
+    .score-note { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.3; }
     .score-total {
       text-align: center;
-      padding: 14px;
-      background: var(--surf2);
-      border-radius: 8px;
-      margin-bottom: 12px;
+      padding: 16px;
+      border-bottom: 0.5px solid var(--sep);
     }
-    .score-total-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
-    .score-total-num { font-family: 'Bebas Neue', sans-serif; font-size: 52px; line-height: 1; }
-    .score-total-denom { font-size: 22px; color: var(--muted); }
+    .score-total-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 2px; }
+    .score-total-num { font-size: 52px; font-weight: 700; line-height: 1; letter-spacing: -2px; }
+    .score-total-denom { font-size: 20px; color: var(--muted); font-weight: 400; }
 
     /* ── Summary cards ── */
-    .sum-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+    .sum-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 8px 16px; margin-bottom: 4px; }
     .sum-card {
       background: var(--surf);
-      border-radius: 12px;
-      padding: 18px;
-      border: 2px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
     }
-    .sum-card.wes { border-color: var(--wes); }
-    .sum-card.wal { border-color: var(--wal); }
-    .sum-name  { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 2px; margin-bottom: 8px; }
+    .sum-name { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
     .sum-card.wes .sum-name { color: var(--wes); }
     .sum-card.wal .sum-name { color: var(--wal); }
-    .sum-pts   { font-family: 'Bebas Neue', sans-serif; font-size: 48px; line-height: 1; }
-    .sum-allow { font-family: 'Bebas Neue', sans-serif; font-size: 26px; color: var(--ok); margin-bottom: 8px; }
-    .sum-break { font-size: 12px; color: var(--muted); line-height: 1.9; }
+    .sum-pts   { font-size: 44px; font-weight: 700; line-height: 1; letter-spacing: -1.5px; }
+    .sum-allow { font-size: 22px; font-weight: 700; color: var(--ok); margin-bottom: 4px; letter-spacing: -0.5px; }
+    .sum-break { font-size: 12px; color: var(--muted); line-height: 1.8; }
 
-    /* ── Day breakdown row ── */
+    /* ── Day breakdown rows ── */
     .day-row-entry {
       display: flex;
       align-items: center;
-      padding: 8px 0;
-      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      border-bottom: 0.5px solid var(--sep);
       gap: 8px;
+      min-height: 44px;
     }
     .day-row-entry:last-child { border-bottom: none; }
-    .day-row-name { font-weight: 600; font-size: 14px; min-width: 36px; }
-    .day-row-pts  { font-family: 'Bebas Neue', sans-serif; font-size: 20px; margin-left: auto; }
+    .day-row-name { font-weight: 600; font-size: 15px; min-width: 36px; }
+    .day-row-pts  { font-size: 17px; font-weight: 600; margin-left: auto; color: var(--text2); }
 
     /* ── Badges ── */
-    .badge {
-      display: inline-block;
-      padding: 2px 7px;
-      border-radius: 4px;
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: .3px;
-    }
-    .badge-bath { background: rgba(96,165,250,.15); color: var(--info); border: 1px solid rgba(96,165,250,.3); }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; }
+    .badge-bath { background: rgba(0,122,255,0.1); color: var(--accent); }
 
     /* ── Divider ── */
-    .div { height: 1px; background: var(--border); margin: 14px 0; }
+    .div { height: 0.5px; background: var(--sep); margin: 0 16px; }
 
-    /* ── Label ── */
-    .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 8px; }
+    /* ── Label / section header ── */
+    .lbl { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; padding: 16px 16px 6px; }
 
     /* ── Hint text ── */
-    .hint { font-size: 12px; color: var(--muted); margin-top: 7px; line-height: 1.5; }
+    .hint { font-size: 13px; color: var(--muted); padding: 4px 16px 10px; line-height: 1.5; }
 
     /* ── Row flex ── */
     .row { display: flex; align-items: center; gap: 10px; }
@@ -329,76 +342,69 @@
     .grow { flex: 1; }
 
     /* ── Empty state ── */
-    .empty { color: var(--muted); font-size: 14px; padding: 8px 0; }
+    .empty { color: var(--muted); font-size: 15px; padding: 20px 16px; text-align: center; }
+
+    /* ── Difficulty selector ── */
+    .diff-row { display: flex; gap: 6px; padding: 8px 16px 12px; }
+    .diff-btn {
+      flex: 1;
+      padding: 10px 4px;
+      border-radius: 10px;
+      border: 2px solid transparent;
+      background: var(--bg);
+      font-family: -apple-system, sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      transition: all .15s;
+      color: var(--muted);
+    }
+    .diff-btn.on { border-color: var(--accent); background: rgba(0,122,255,0.08); color: var(--accent); }
+    .diff-btn span:first-child { font-size: 20px; }
 
     /* ── Responsive ── */
     @media (max-width: 480px) {
-      .sum-grid { grid-template-columns: 1fr; }
+      .sum-grid { grid-template-columns: 1fr 1fr; }
       .score-grid { grid-template-columns: 1fr 1fr; }
     }
     @media (max-width: 340px) {
       .score-grid { grid-template-columns: 1fr; }
+      .sum-grid { grid-template-columns: 1fr; }
     }
 
     /* ── Print ── */
     @media print {
       @page { size: letter portrait; margin: 0.3in; }
-
-      *, *::before, *::after {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-        box-sizing: border-box !important;
-      }
-
+      *, *::before, *::after { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box !important; }
       html { zoom: 0.78; }
-      body { background: #fff !important; color: #111 !important; font-size: 10px !important; }
-
+      body { background: #fff !important; color: #111 !important; font-size: 10px !important; padding-bottom: 0 !important; }
       .hdr, .tabs, .no-print, .msg { display: none !important; }
-
       .page { padding: 0 !important; max-width: 100% !important; margin: 0 !important; }
-
-      .card {
-        background: #fff !important;
-        border: 1px solid #bbb !important;
-        border-radius: 3px !important;
-        padding: 6px 10px !important;
-        margin-bottom: 6px !important;
-        break-inside: avoid;
-        page-break-inside: avoid;
-      }
-      .card-title { color: #666 !important; font-size: 8px !important; margin-bottom: 6px !important; }
-
-      /* Weekly summary cards — side by side */
-      .sum-grid { grid-template-columns: 1fr 1fr !important; gap: 6px !important; margin-bottom: 6px !important; }
-      .sum-card { background: #fff !important; padding: 8px 10px !important; border-radius: 3px !important; border-width: 2px !important; break-inside: avoid; }
-      .sum-card.wes { border-color: #7c6fff !important; }
-      .sum-card.wal { border-color: #ff6b8a !important; }
-      .sum-name { font-size: 14px !important; margin-bottom: 2px !important; }
-      .sum-card.wes .sum-name { color: #7c6fff !important; }
-      .sum-card.wal .sum-name { color: #ff6b8a !important; }
-      .sum-pts { font-size: 26px !important; line-height: 1 !important; }
+      .card { background: #fff !important; border: 1px solid #bbb !important; border-radius: 3px !important; padding: 6px 10px !important; margin: 0 0 6px !important; box-shadow: none !important; break-inside: avoid; page-break-inside: avoid; }
+      .card-title { color: #666 !important; font-size: 8px !important; padding: 0 0 6px !important; }
+      .sum-grid { grid-template-columns: 1fr 1fr !important; gap: 6px !important; padding: 0 !important; margin-bottom: 6px !important; }
+      .sum-card { background: #fff !important; padding: 8px 10px !important; border-radius: 3px !important; box-shadow: none !important; border: 2px solid #ddd !important; break-inside: avoid; }
+      .sum-card.wes { border-color: #5856D6 !important; }
+      .sum-card.wal { border-color: #FF2D55 !important; }
+      .sum-name { font-size: 10px !important; margin-bottom: 2px !important; }
+      .sum-card.wes .sum-name { color: #5856D6 !important; }
+      .sum-card.wal .sum-name { color: #FF2D55 !important; }
+      .sum-pts { font-size: 26px !important; letter-spacing: -1px !important; }
       .sum-allow { font-size: 15px !important; color: #1a7a1a !important; margin-bottom: 2px !important; }
       .sum-break { font-size: 9px !important; color: #555 !important; line-height: 1.5 !important; }
-      .empty { color: #888 !important; font-size: 10px !important; }
-
-      /* Breakdown cards — side by side */
-      .breakdown-wrap {
-        display: grid !important;
-        grid-template-columns: 1fr 1fr !important;
-        gap: 6px !important;
-        margin-bottom: 6px !important;
-      }
+      .empty { color: #888 !important; font-size: 10px !important; padding: 6px 0 !important; }
+      .breakdown-wrap { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 6px !important; margin-bottom: 6px !important; }
       .breakdown-wrap .card { margin-bottom: 0 !important; }
-
-      /* Day breakdown rows */
-      .day-row-entry { padding: 3px 0 !important; }
+      .day-row-entry { padding: 3px 10px !important; min-height: auto !important; }
       .day-row-name { font-size: 11px !important; min-width: 28px !important; }
       .day-row-pts { font-size: 13px !important; }
       .btn-ghost.btn-sm { display: none !important; }
-      .badge-bath { background: #e8f0fe !important; color: #1a73e8 !important; border-color: #a8c7fa !important; font-size: 8px !important; }
-
-      /* Allowance scale */
-      .div { background: #ddd !important; margin: 6px 0 !important; }
+      .badge-bath { background: #e8f0fe !important; color: #1a73e8 !important; font-size: 8px !important; }
+      .div { background: #ddd !important; margin: 4px 0 !important; }
     }
   </style>
 </head>
@@ -1004,13 +1010,18 @@ function restoreBaselines() {
 // ─── Rendering ───────────────────────────────────────────────────────────────
 function render() { renderTabs(); renderPage(); }
 
+const TAB_ICONS = { setup: '⚙️', grade: '📷', summary: '📊' };
+
 function renderTabs() {
   const el = document.getElementById('tabs');
   el.innerHTML = '';
-  ['Setup','Grade','Summary'].forEach(t => {
+  ['Grade','Summary','Setup'].forEach(t => {
+    const key = t.toLowerCase();
     const b = document.createElement('button');
-    b.className = 'tab' + (S.tab === t.toLowerCase() ? ' on' : '');
-    b.textContent = t;
+    b.className = 'tab' + (S.tab === key ? ' on' : '');
+    const icon = document.createElement('span'); icon.className = 'tab-icon'; icon.textContent = TAB_ICONS[key];
+    const label = document.createElement('span'); label.textContent = t;
+    b.appendChild(icon); b.appendChild(label);
     b.onclick = () => {
       autoSave();                          // persist pending grade before leaving
       gradingToken++;                      // invalidate any in-flight API call
@@ -1050,17 +1061,12 @@ function renderSetup(el) {
   diffCard.appendChild(diffDesc);
 
   const diffRow = document.createElement('div');
-  diffRow.style.cssText = 'display:flex;gap:8px;';
+  diffRow.className = 'diff-row';
   DIFFICULTY.forEach(d => {
     const btn = document.createElement('button');
-    const active = S.difficulty === d.level;
-    btn.style.cssText = `flex:1;padding:10px 4px;border-radius:8px;border:2px solid ${active ? 'var(--accent)' : 'var(--border)'};background:${active ? 'rgba(124,111,255,.15)' : 'var(--surf2)'};color:${active ? 'var(--text)' : 'var(--muted)'};font-family:\'DM Sans\',sans-serif;font-size:11px;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;transition:all .15s;`;
-    btn.innerHTML = `<span style="font-size:18px">${d.emoji}</span><span>${d.level}</span><span style="font-size:9px;letter-spacing:.3px">${d.label.toUpperCase()}</span>`;
-    btn.onclick = () => {
-      S.difficulty = d.level;
-      saveDifficulty();
-      render();
-    };
+    btn.className = 'diff-btn' + (S.difficulty === d.level ? ' on' : '');
+    btn.innerHTML = `<span>${d.emoji}</span><span>${d.level}</span><span style="font-size:9px;letter-spacing:.3px">${d.label.toUpperCase()}</span>`;
+    btn.onclick = () => { S.difficulty = d.level; saveDifficulty(); render(); };
     diffRow.appendChild(btn);
   });
   diffCard.appendChild(diffRow);
@@ -1197,22 +1203,23 @@ function renderSavedScore(el, entry) {
 
 // ── Grade tab ──
 function renderGrade(el) {
-  // Boy selector
-  const boyRow = document.createElement('div');
-  boyRow.className = 'boy-row';
+  // Boy selector — iOS segmented control
+  const segCtrl = document.createElement('div');
+  segCtrl.className = 'seg-control';
   ['Wesley','Walker'].forEach(b => {
     const btn = document.createElement('button');
-    btn.className = 'boy-btn' + (S.boy===b ? (b==='Wesley' ? ' on-wes' : ' on-wal') : '');
+    const isOn = S.boy === b;
+    btn.className = 'seg-btn' + (isOn ? (b==='Wesley' ? ' on-wes' : ' on-wal') : '');
     btn.textContent = b;
     btn.onclick = () => {
       if (S.boy === b) return;
-      autoSave();                          // persist pending grade before switching boy
+      autoSave();
       gradingToken++; S.grading = false; S.gradePct = 0;
       S.boy = b; S.photos = {}; S.thumbs = {}; S.result = null; S.regrade = false; render();
     };
-    boyRow.appendChild(btn);
+    segCtrl.appendChild(btn);
   });
-  el.appendChild(boyRow);
+  el.appendChild(segCtrl);
 
   // Day selector
   const dayCard = mkCard('Select Day');
@@ -1304,7 +1311,7 @@ function renderGrade(el) {
 
     const gradeBtn = document.createElement('button');
     gradeBtn.className = 'btn btn-primary btn-full';
-    gradeBtn.style.marginBottom = '8px';
+    gradeBtn.style.cssText = 'margin: 0 16px 8px; width: calc(100% - 32px);';
     gradeBtn.textContent = `Grade ${S.boy}'s Room`;
     gradeBtn.onclick = gradePhotos;
     el.appendChild(gradeBtn);
