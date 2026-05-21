@@ -298,17 +298,18 @@
     .score-total-denom { font-size: 20px; color: var(--muted); font-weight: 400; }
 
     /* ── Summary cards ── */
-    .sum-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 8px 16px; margin-bottom: 4px; }
+    .sum-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 8px 16px; margin-bottom: 8px; }
     .sum-card {
       background: var(--surf);
       border-radius: 16px;
       padding: 16px;
       box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      border-left: 4px solid var(--child-color, var(--sep));
     }
-    .sum-name { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+    .sum-name { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
     .sum-pts   { font-size: 44px; font-weight: 700; line-height: 1; letter-spacing: -1.5px; }
-    .sum-allow { font-size: 22px; font-weight: 700; color: var(--ok); margin-bottom: 4px; letter-spacing: -0.5px; }
-    .sum-break { font-size: 12px; color: var(--muted); line-height: 1.8; }
+    .sum-allow { font-size: 22px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.5px; }
+    .sum-break { font-size: 11px; color: var(--muted); line-height: 1.6; }
 
     /* ── Day breakdown rows ── */
     .day-row-entry {
@@ -1576,13 +1577,17 @@ function renderSummary(el) {
     return;
   }
 
+  // Print button — small, top-right
+  const printWrap = document.createElement('div');
+  printWrap.style.cssText = 'display:flex;justify-content:flex-end;padding:4px 16px 8px;';
   const printBtn = document.createElement('button');
-  printBtn.className = 'btn btn-ghost btn-full no-print';
-  printBtn.style.marginBottom = '14px';
-  printBtn.innerHTML = '🖨️ &nbsp;Print Summary';
+  printBtn.className = 'btn btn-ghost btn-sm no-print';
+  printBtn.innerHTML = '🖨️ &nbsp;Print';
   printBtn.onclick = () => window.print();
-  el.appendChild(printBtn);
+  printWrap.appendChild(printBtn);
+  el.appendChild(printWrap);
 
+  // ── Score summary cards ──
   const sumGrid = document.createElement('div');
   sumGrid.className = 'sum-grid';
 
@@ -1591,7 +1596,8 @@ function renderSummary(el) {
     const w = calcWeekly(boy);
     const card = document.createElement('div');
     card.className = 'sum-card';
-    card.style.setProperty('--child-color', child.color); // used in print CSS for border
+    card.style.setProperty('--child-color', child.color);
+    card.style.borderLeft = `4px solid ${child.color}`;
 
     const name = document.createElement('div');
     name.className = 'sum-name';
@@ -1600,7 +1606,9 @@ function renderSummary(el) {
     card.appendChild(name);
 
     if (!w) {
-      const emp = document.createElement('div'); emp.className = 'empty'; emp.textContent = 'No scores yet';
+      const emp = document.createElement('div');
+      emp.style.cssText = 'padding:12px 0 6px;text-align:center;';
+      emp.innerHTML = `<div style="font-size:26px;margin-bottom:6px">📊</div><div style="font-size:13px;color:var(--muted);line-height:1.4">No scores yet<br><span style="font-size:11px">Head to Grade to start</span></div>`;
       card.appendChild(emp);
     } else {
       const allWeekGraded = w.daysGraded === w.totalDays;
@@ -1612,35 +1620,57 @@ function renderSummary(el) {
 
       if (!allWeekGraded) {
         const proj = document.createElement('div');
-        proj.style.cssText = 'font-size:11px;color:var(--muted);text-align:center;margin-top:-4px;margin-bottom:6px;letter-spacing:.3px';
-        proj.textContent = `projected · ${w.daysGraded} of ${w.totalDays} days graded`;
+        proj.style.cssText = 'font-size:11px;color:var(--muted);margin-top:-2px;margin-bottom:4px;letter-spacing:.2px';
+        proj.textContent = `projected · ${w.daysGraded}/${w.totalDays} days`;
         card.appendChild(proj);
       }
 
+      // Progress bar in child color
+      const barWrap = document.createElement('div');
+      barWrap.style.cssText = 'height:4px;background:rgba(0,0,0,0.07);border-radius:2px;margin:8px 0 10px;overflow:hidden;';
+      const barFill = document.createElement('div');
+      barFill.style.cssText = `height:100%;width:${Math.min(displayPct,100)}%;border-radius:2px;background:${child.color};`;
+      barWrap.appendChild(barFill);
+      card.appendChild(barWrap);
+
       const allow = document.createElement('div'); allow.className = 'sum-allow';
+      allow.style.color = child.color;
       allow.textContent = allowance(displayPct);
       card.appendChild(allow);
 
       const brk = document.createElement('div'); brk.className = 'sum-break';
-      brk.innerHTML = `${w.earned} / ${w.possible} pts graded${!allWeekGraded ? ` &nbsp;·&nbsp; actual ${w.pct}%` : ''}`;
+      brk.innerHTML = `${w.earned}&thinsp;/&thinsp;${w.possible} pts${!allWeekGraded ? `<br>actual ${w.pct}%` : ''}`;
       card.appendChild(brk);
     }
     sumGrid.appendChild(card);
   });
   el.appendChild(sumGrid);
 
-  // Per-child day breakdown
+  // ── Per-child day breakdown ──
   const breakdownWrap = document.createElement('div');
   breakdownWrap.className = 'breakdown-wrap';
 
   S.children.forEach(child => {
     const boy = child.name;
-    const card = mkCard(`${boy} — Daily Breakdown`);
+    const card = mkCard('');
+    // Custom title row with colored dot
+    const titleRow = document.createElement('div');
+    titleRow.style.cssText = 'display:flex;align-items:center;gap:8px;padding:14px 16px 8px;';
+    const dot = document.createElement('span');
+    dot.style.cssText = `width:9px;height:9px;border-radius:50%;background:${child.color};display:inline-block;flex-shrink:0;`;
+    const titleTxt = document.createElement('span');
+    titleTxt.style.cssText = 'font-size:13px;font-weight:400;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;';
+    titleTxt.textContent = `${boy} — Daily Breakdown`;
+    titleRow.appendChild(dot); titleRow.appendChild(titleTxt);
+    card.insertBefore(titleRow, card.firstChild);
+
     const entries = Object.entries(S.scores[boy] || {})
       .sort((a,b) => DAYS.indexOf(a[0]) - DAYS.indexOf(b[0]));
 
     if (!entries.length) {
-      const emp = document.createElement('div'); emp.className = 'empty'; emp.textContent = 'No days graded yet';
+      const emp = document.createElement('div');
+      emp.style.cssText = 'text-align:center;padding:16px;font-size:14px;color:var(--muted);';
+      emp.textContent = 'No days graded yet';
       card.appendChild(emp);
     } else {
       entries.forEach(([d, e]) => {
@@ -1655,8 +1685,24 @@ function renderSummary(el) {
         }
 
         const rs = roomScore(e); const bs = e.hasBath ? bathScore(e) : null;
+        const total = rs + (bs || 0);
+        const maxPts = e.hasBath ? 90 : 60;
+        const pct = Math.round((total / maxPts) * 100);
+        const barColor = pct >= 85 ? 'var(--ok)' : pct >= 60 ? 'var(--warn)' : 'var(--err)';
+
+        // Mini score bar
+        const miniBar = document.createElement('div');
+        miniBar.style.cssText = 'flex:1;height:4px;background:rgba(0,0,0,0.06);border-radius:2px;overflow:hidden;margin:0 8px;';
+        const miniFill = document.createElement('div');
+        miniFill.style.cssText = `height:100%;width:${pct}%;background:${barColor};border-radius:2px;`;
+        miniBar.appendChild(miniFill);
+        row.appendChild(miniBar);
+
         const pts = document.createElement('div'); pts.className = 'day-row-pts';
-        pts.innerHTML = bs !== null ? `${rs} <span style="color:var(--muted);font-size:14px">+</span> ${bs}` : `${rs}`;
+        pts.style.color = barColor;
+        pts.innerHTML = bs !== null
+          ? `${rs}<span style="color:var(--muted);font-size:11px;font-weight:400"> +${bs}</span>`
+          : `${rs}`;
         row.appendChild(pts);
 
         const del = document.createElement('button');
@@ -1678,39 +1724,39 @@ function renderSummary(el) {
   });
   el.appendChild(breakdownWrap);
 
-  // Allowance scale reference
+  // ── Allowance scale ──
   const m = S.maxAllowance || 50;
   const scaleCard = mkCard(`Allowance Scale (max $${Math.round(m)})`);
   const scaleTiers = [
-    ['90 – 100%', '$' + Math.round(m)],
-    ['80 – 89%',  '$' + Math.round(m * 0.90)],
-    ['70 – 79%',  '$' + Math.round(m * 0.80)],
-    ['60 – 69%',  '$' + Math.round(m * 0.70)],
-    ['50 – 59%',  '$' + Math.round(m * 0.60)],
-    ['< 50%',     "Parents' call"],
+    ['90 – 100%', '$' + Math.round(m),          'var(--ok)'],
+    ['80 – 89%',  '$' + Math.round(m * 0.90),   'var(--ok)'],
+    ['70 – 79%',  '$' + Math.round(m * 0.80),   'var(--warn)'],
+    ['60 – 69%',  '$' + Math.round(m * 0.70),   'var(--warn)'],
+    ['50 – 59%',  '$' + Math.round(m * 0.60),   'var(--err)'],
+    ["< 50%",     "Parents' call",               'var(--muted)'],
   ];
-  scaleTiers.forEach(([range, amt]) => {
+  scaleTiers.forEach(([range, amt, color], i) => {
     const r = document.createElement('div');
-    r.style.cssText = 'display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px';
-    r.innerHTML = `<span style="color:var(--muted)">${range}</span><span style="font-weight:600">${amt}</span>`;
+    r.style.cssText = `display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:0.5px solid var(--sep);${i % 2 === 1 ? 'background:var(--bg);' : ''}`;
+    r.innerHTML = `<span style="font-size:13px;color:var(--muted)">${range}</span><span style="font-weight:700;font-size:15px;color:${color}">${amt}</span>`;
     scaleCard.appendChild(r);
   });
   el.appendChild(scaleCard);
 
-  // Week Management
+  // ── Week Management ──
   const resetCard = mkCard('Week Management');
   resetCard.classList.add('no-print');
   const hint = document.createElement('div');
-  hint.className = 'hint'; hint.style.marginBottom = '12px';
+  hint.className = 'hint'; hint.style.marginBottom = '10px';
   hint.textContent = 'Clears scores and photos for that week. Baseline images are never affected.';
   resetCard.appendChild(hint);
 
   const btnRow = document.createElement('div');
-  btnRow.className = 'row wrap'; btnRow.style.gap = '10px'; btnRow.style.padding = '0 16px 8px';
+  btnRow.className = 'row wrap'; btnRow.style.gap = '8px'; btnRow.style.padding = '0 16px 14px';
 
   S.children.forEach(child => {
     const btn = document.createElement('button');
-    btn.className = 'btn btn-danger';
+    btn.style.cssText = 'border:1.5px solid var(--err);color:var(--err);background:transparent;padding:8px 16px;font-size:14px;font-weight:600;border-radius:10px;cursor:pointer;font-family:-apple-system,BlinkMacSystemFont,sans-serif;';
     btn.textContent = `Clear ${child.name}'s Week`;
     btn.onclick = () => {
       if (!confirm(`Confirm clear ${child.name}'s week?`)) return;
@@ -1729,8 +1775,7 @@ function renderSummary(el) {
 
   if (S.children.length > 1) {
     const resetAllBtn = document.createElement('button');
-    resetAllBtn.className = 'btn btn-ghost';
-    resetAllBtn.style.cssText = 'border-color:var(--err);color:var(--err)';
+    resetAllBtn.style.cssText = 'border:1.5px solid var(--sep);color:var(--muted);background:transparent;padding:8px 16px;font-size:14px;font-weight:600;border-radius:10px;cursor:pointer;font-family:-apple-system,BlinkMacSystemFont,sans-serif;';
     resetAllBtn.textContent = 'Clear All';
     resetAllBtn.onclick = () => {
       if (!confirm('Confirm clear all weeks?')) return;
