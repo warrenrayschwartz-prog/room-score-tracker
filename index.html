@@ -30,7 +30,7 @@
       min-height: 100vh;
       font-size: 17px;
       -webkit-text-size-adjust: 100%;
-      padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 12px);
+      padding-bottom: calc(82px + env(safe-area-inset-bottom, 0px));
     }
 
     /* ── Navigation Bar ── */
@@ -53,17 +53,20 @@
     }
     .hdr-sub { display: none; }
 
-    /* ── Tab Bar — fixed bottom, iOS style ── */
+    /* ── Tab Bar ── */
     .tabs {
       position: fixed;
       bottom: 0; left: 0; right: 0;
       display: flex;
-      background: rgba(249,249,249,0.94);
-      backdrop-filter: saturate(180%) blur(20px);
-      -webkit-backdrop-filter: saturate(180%) blur(20px);
-      border-top: 0.5px solid rgba(60,60,67,0.29);
-      padding-bottom: env(safe-area-inset-bottom, 0px);
+      align-items: center;
+      background: rgba(250,250,252,0.96);
+      backdrop-filter: saturate(180%) blur(24px);
+      -webkit-backdrop-filter: saturate(180%) blur(24px);
+      border-top: 0.5px solid rgba(60,60,67,0.18);
+      padding: 10px 10px;
+      padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
       z-index: 200;
+      gap: 6px;
     }
     .tab {
       flex: 1;
@@ -71,46 +74,36 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 8px 4px 7px;
-      min-height: 64px;
+      gap: 4px;
+      padding: 9px 8px 8px;
       border: none;
-      background: none;
-      color: var(--muted);
+      border-radius: 14px;
+      background: transparent;
+      color: #8E8E93;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
       font-size: 11px;
       font-weight: 500;
+      letter-spacing: 0.1px;
       cursor: pointer;
-      gap: 3px;
-      letter-spacing: 0;
-      transition: color 0.2s;
-      border-bottom: none;
-      margin-bottom: 0;
-      opacity: 0.6;
-      transition: color 0.2s, opacity 0.2s;
+      transition: background 0.18s, color 0.18s, transform 0.12s;
+      -webkit-tap-highlight-color: transparent;
     }
-    .tab.on { color: var(--accent); opacity: 1; }
-    .tab:hover:not(.on) { opacity: 0.85; }
-    .tab-icon-wrap {
-      width: 58px;
-      height: 34px;
-      border-radius: 17px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: background 0.2s, transform 0.15s;
+    .tab svg {
+      width: 23px; height: 23px; display: block;
+      stroke: currentColor; fill: none;
+      stroke-width: 1.75;
+      stroke-linecap: round; stroke-linejoin: round;
+      transition: transform 0.18s;
     }
-    .tab-icon { font-size: 22px; line-height: 1; transition: transform 0.15s; }
-    .tab.on .tab-icon-wrap { background: rgba(0,122,255,0.15); }
-    .tab.on .tab-icon { transform: scale(1.12); }
-    .tab.on .tab-label { font-weight: 700; letter-spacing: -0.1px; }
-    .tab-dot {
-      width: 4px; height: 4px; border-radius: 50%;
+    .tab.on {
       background: var(--accent);
-      opacity: 0;
-      transition: opacity 0.2s;
-      margin-top: 1px;
+      color: #fff;
+      font-weight: 700;
+      letter-spacing: -0.1px;
     }
-    .tab.on .tab-dot { opacity: 1; }
+    .tab.on svg { stroke: #fff; transform: scale(1.06); }
+    .tab:active { transform: scale(0.94); }
+    .tab:hover:not(.on) { background: rgba(0,0,0,0.05); color: var(--text2); }
 
     /* ── Content ── */
     .page { padding: 8px 0 16px; max-width: 680px; margin: 0 auto; }
@@ -1013,7 +1006,11 @@ function restoreBaselines() {
 // ─── Rendering ───────────────────────────────────────────────────────────────
 function render() { renderTabs(); renderPage(); }
 
-const TAB_ICONS = { setup: '⚙️', grade: '📷', summary: '📊' };
+const TAB_SVGS = {
+  grade: `<svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`,
+  summary: `<svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>`,
+  setup: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+};
 
 function renderTabs() {
   const el = document.getElementById('tabs');
@@ -1022,18 +1019,12 @@ function renderTabs() {
     const key = t.toLowerCase();
     const b = document.createElement('button');
     b.className = 'tab' + (S.tab === key ? ' on' : '');
-    const iconWrap = document.createElement('div');
-    iconWrap.className = 'tab-icon-wrap';
-    const icon = document.createElement('span'); icon.className = 'tab-icon'; icon.textContent = TAB_ICONS[key];
-    iconWrap.appendChild(icon);
-    const label = document.createElement('span'); label.className = 'tab-label'; label.textContent = t;
-    const dot = document.createElement('span'); dot.className = 'tab-dot';
-    b.appendChild(iconWrap); b.appendChild(label); b.appendChild(dot);
+    b.innerHTML = TAB_SVGS[key] + `<span>${t}</span>`;
     b.onclick = () => {
       autoSave();
       gradingToken++;
       S.grading = false; S.gradePct = 0;
-      S.tab = t.toLowerCase(); S.msg = ''; render();
+      S.tab = key; S.msg = ''; render();
     };
     el.appendChild(b);
   });
