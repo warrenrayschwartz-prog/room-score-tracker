@@ -361,20 +361,6 @@
     .diff-btn span:first-child { font-size: 20px; }
 
     /* ── Children management ── */
-    .child-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 16px;
-      border-bottom: 0.5px solid var(--sep);
-    }
-    .child-dot {
-      width: 12px; height: 12px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-    .child-name { font-weight: 600; font-size: 17px; flex: 1; }
-    .child-bath-pills { display: flex; gap: 4px; flex-wrap: wrap; }
     .child-add-form { padding: 12px 16px 16px; }
 
     /* ── Responsive ── */
@@ -543,7 +529,7 @@ function todayDay() {
 function getChild(name) { return S.children.find(c => c.name === name) || null; }
 function isBathDay(boy, day) {
   const child = getChild(boy);
-  return child ? child.bathDays.includes(day) : false;
+  return child && Array.isArray(child.bathDays) ? child.bathDays.includes(day) : false;
 }
 
 // ─── IndexedDB Photo Storage ─────────────────────────────────────────────────
@@ -610,6 +596,9 @@ function loadState() {
     const chRaw = localStorage.getItem('rsc_children');
     if (chRaw) {
       S.children = JSON.parse(chRaw);
+      // Guard: ensure every child has a valid bathDays array
+      // (older saved data may be missing this field entirely)
+      S.children.forEach(c => { if (!Array.isArray(c.bathDays)) c.bathDays = []; });
     } else {
       // Auto-migrate: if scores exist for Wesley and/or Walker, create those children
       const scRaw = localStorage.getItem('rsc_scores_v4');
@@ -699,7 +688,7 @@ function calcWeekly(boy) {
   let ungradedMax = 0;
   ungradedDays.forEach(d => {
     ungradedMax += 60;
-    if (child.bathDays.includes(d)) ungradedMax += 30;
+    if (Array.isArray(child.bathDays) && child.bathDays.includes(d)) ungradedMax += 30;
   });
   const projEarned   = earned + ungradedMax;
   const projPossible = possible + ungradedMax;
@@ -1099,34 +1088,22 @@ function renderSetup(el) {
   const childCard = mkCard('Children');
 
   if (S.children.length > 0) {
-    S.children.forEach((child, idx) => {
+    S.children.forEach(child => {
       const row = document.createElement('div');
-      row.className = 'child-row';
+      row.style.cssText = 'padding:10px 16px 8px;border-bottom:0.5px solid var(--sep);';
+
+      // ── Top line: dot + name + remove button ──
+      const topLine = document.createElement('div');
+      topLine.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;';
 
       const dot = document.createElement('span');
-      dot.className = 'child-dot';
-      dot.style.background = child.color;
-      row.appendChild(dot);
+      dot.style.cssText = `display:inline-block;width:10px;height:10px;border-radius:50%;background:${child.color};flex-shrink:0;`;
+      topLine.appendChild(dot);
 
       const nameEl = document.createElement('span');
-      nameEl.className = 'child-name';
+      nameEl.style.cssText = 'font-weight:600;font-size:17px;flex:1;';
       nameEl.textContent = child.name;
-      row.appendChild(nameEl);
-
-      const bathEl = document.createElement('div');
-      bathEl.className = 'child-bath-pills';
-      if (child.bathDays.length > 0) {
-        child.bathDays.forEach(d => {
-          const p = document.createElement('span');
-          p.style.cssText = `display:inline-block;padding:3px 10px;border-radius:20px;background:var(--accent);color:#fff;font-size:12px;font-weight:600;`;
-          p.textContent = d;
-          bathEl.appendChild(p);
-        });
-      } else {
-        bathEl.style.cssText = 'font-size:12px;color:var(--muted)';
-        bathEl.textContent = 'No bath days';
-      }
-      row.appendChild(bathEl);
+      topLine.appendChild(nameEl);
 
       const removeBtn = document.createElement('button');
       removeBtn.className = 'btn btn-ghost btn-sm';
@@ -1134,11 +1111,14 @@ function renderSetup(el) {
       removeBtn.textContent = 'Remove';
       removeBtn.onclick = () => {
         if (!confirm(`Remove ${child.name}? Their scores and baselines will be deleted.`)) return;
+        // Find by name to avoid stale-index bug
+        const i = S.children.findIndex(c => c.name === child.name);
+        if (i < 0) return;
         DAYS.forEach(d => _deletePhoto(child.name, d));
         delete S.scores[child.name];
         delete S.savedPhotos[child.name];
         BASE_ROOM.forEach(sl => delete S.baselines[`${child.name}|${sl.id}`]);
-        S.children.splice(idx, 1);
+        S.children.splice(i, 1);
         if (S.boy === child.name) {
           S.boy = S.children[0]?.name || '';
           S.result = null; S.regrade = false; S.photos = {}; S.thumbs = {};
@@ -1147,7 +1127,34 @@ function renderSetup(el) {
         saveChildren(); saveScores(); saveBaselines();
         showMsg(`${child.name} removed`, 'info');
       };
-      row.appendChild(removeBtn);
+      topLine.appendChild(removeBtn);
+      row.appendChild(topLine);
+
+      // ── Bottom line: all 6 days as clickable pills (tap to toggle bath day) ──
+      const bathLine = document.createElement('div');
+      bathLine.style.cssText = 'display:flex;gap:5px;flex-wrap:wrap;';
+      DAYS.forEach(d => {
+        const p = document.createElement('button');
+        const isOn = Array.isArray(child.bathDays) && child.bathDays.includes(d);
+        p.className = 'day-pill' + (isOn ? ' on' : '');
+        p.style.cssText = 'padding:4px 12px;font-size:13px;box-shadow:none;';
+        p.textContent = d;
+        p.title = isOn ? 'Remove bath day' : 'Add bath day';
+        p.onclick = () => {
+          if (!Array.isArray(child.bathDays)) child.bathDays = [];
+          if (child.bathDays.includes(d)) {
+            child.bathDays = child.bathDays.filter(x => x !== d);
+          } else {
+            child.bathDays = [...child.bathDays, d]
+              .sort((a, b) => DAYS.indexOf(a) - DAYS.indexOf(b));
+          }
+          saveChildren();
+          render();
+        };
+        bathLine.appendChild(p);
+      });
+      row.appendChild(bathLine);
+
       childCard.appendChild(row);
     });
   }
@@ -1192,7 +1199,9 @@ function renderSetup(el) {
   addBtn.style.marginTop = '12px';
   addBtn.textContent = '+ Add Child';
   addBtn.onclick = () => {
-    const name = S.pendingChildName.trim();
+    // Read directly from the DOM element — more reliable than state on mobile
+    // (oninput may not fire before button click on some iOS browsers)
+    const name = (nameInp.value || S.pendingChildName || '').trim();
     if (!name) { showMsg('Enter a name first', 'warn'); return; }
     if (S.children.find(c => c.name.toLowerCase() === name.toLowerCase())) {
       showMsg(`"${name}" already exists`, 'warn'); return;
