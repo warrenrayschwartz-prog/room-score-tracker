@@ -1044,6 +1044,35 @@ function renderPage() {
 
 // ── Setup tab ──
 function renderSetup(el) {
+  // Welcome card — only shown to first-time users (no children added yet)
+  if (S.children.length === 0) {
+    const welcomeCard = document.createElement('div');
+    welcomeCard.className = 'card';
+    welcomeCard.style.cssText = 'margin:16px 16px 10px;padding:20px 16px 18px;background:linear-gradient(135deg,rgba(0,122,255,0.08),rgba(88,86,214,0.08));border:1px solid rgba(0,122,255,0.18);';
+
+    const welcomeTitle = document.createElement('div');
+    welcomeTitle.style.cssText = 'font-size:20px;font-weight:700;letter-spacing:-0.4px;margin-bottom:10px;';
+    welcomeTitle.textContent = '👋 Welcome to RoomTracker!';
+
+    const step1 = document.createElement('div');
+    step1.style.cssText = 'display:flex;gap:10px;margin-bottom:10px;align-items:flex-start;';
+    step1.innerHTML = `<span style="font-size:22px;line-height:1.2">1️⃣</span><span style="font-size:15px;line-height:1.5;color:var(--text2)">Start by adding your children's names below and selecting the days each one is responsible for a clean bathroom.</span>`;
+
+    const step2 = document.createElement('div');
+    step2.style.cssText = 'display:flex;gap:10px;margin-bottom:10px;align-items:flex-start;';
+    step2.innerHTML = `<span style="font-size:22px;line-height:1.2">2️⃣</span><span style="font-size:15px;line-height:1.5;color:var(--text2)">Then upload photos of what their room and bathroom look like when clean and organized. These become the baseline standard.</span>`;
+
+    const step3 = document.createElement('div');
+    step3.style.cssText = 'display:flex;gap:10px;align-items:flex-start;';
+    step3.innerHTML = `<span style="font-size:22px;line-height:1.2">3️⃣</span><span style="font-size:15px;line-height:1.5;color:var(--text2)">Each day, take new photos in the Grade tab — Claude will compare them to the baseline and score the room automatically.</span>`;
+
+    welcomeCard.appendChild(welcomeTitle);
+    welcomeCard.appendChild(step1);
+    welcomeCard.appendChild(step2);
+    welcomeCard.appendChild(step3);
+    el.appendChild(welcomeCard);
+  }
+
   // Grading Difficulty
   const diffCard = mkCard('Grading Difficulty');
   const diffDesc = document.createElement('div');
