@@ -30,7 +30,7 @@
       min-height: 100vh;
       font-size: 17px;
       -webkit-text-size-adjust: 100%;
-      padding-bottom: calc(49px + env(safe-area-inset-bottom, 0px) + 12px);
+      padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 12px);
     }
 
     /* ── Navigation Bar ── */
@@ -71,23 +71,34 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 5px 0 4px;
-      min-height: 49px;
+      padding: 8px 0 6px;
+      min-height: 64px;
       border: none;
       background: none;
       color: var(--muted);
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 500;
       cursor: pointer;
-      gap: 2px;
+      gap: 3px;
       letter-spacing: 0;
-      transition: color 0.1s;
+      transition: color 0.15s;
       border-bottom: none;
       margin-bottom: 0;
     }
-    .tab-icon { font-size: 24px; line-height: 1; }
+    .tab-icon-wrap {
+      width: 52px;
+      height: 30px;
+      border-radius: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+    .tab-icon { font-size: 22px; line-height: 1; }
     .tab.on { color: var(--accent); }
+    .tab.on .tab-icon-wrap { background: rgba(0,122,255,0.14); }
+    .tab.on .tab-label { font-weight: 700; }
     .tab:hover:not(.on) { color: var(--text2); }
 
     /* ── Content ── */
@@ -150,37 +161,32 @@
     .btn-full    { width: 100%; }
     .btn-wrap    { padding: 0 16px 8px; }
 
-    /* ── Segmented Control ── */
-    .seg-control {
+    /* ── Child Selector (Grade tab) ── */
+    .child-selector {
       display: flex;
-      background: rgba(118,118,128,0.12);
-      border-radius: 9px;
-      padding: 2px;
-      margin: 8px 16px 4px;
+      gap: 8px;
+      padding: 12px 16px 4px;
       overflow-x: auto;
-      gap: 0;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
     }
-    .seg-btn {
+    .child-selector::-webkit-scrollbar { display: none; }
+    .child-btn {
       flex: 1;
-      min-width: 60px;
-      padding: 7px 12px;
-      border-radius: 7px;
+      min-width: 80px;
+      padding: 12px 16px;
+      border-radius: 14px;
       border: none;
-      background: transparent;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--text2);
+      font-size: 17px;
+      font-weight: 700;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.15s;
       text-align: center;
       white-space: nowrap;
+      letter-spacing: -0.3px;
     }
-    .seg-btn.on-child {
-      background: #fff;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.14), 0 1px 1px rgba(0,0,0,0.06);
-      /* color set inline per child */
-    }
+    .child-btn:active { transform: scale(.97); opacity: 0.85; }
 
     /* ── Day pills ── */
     .day-row {
@@ -1004,9 +1010,12 @@ function renderTabs() {
     const key = t.toLowerCase();
     const b = document.createElement('button');
     b.className = 'tab' + (S.tab === key ? ' on' : '');
+    const iconWrap = document.createElement('div');
+    iconWrap.className = 'tab-icon-wrap';
     const icon = document.createElement('span'); icon.className = 'tab-icon'; icon.textContent = TAB_ICONS[key];
-    const label = document.createElement('span'); label.textContent = t;
-    b.appendChild(icon); b.appendChild(label);
+    iconWrap.appendChild(icon);
+    const label = document.createElement('span'); label.className = 'tab-label'; label.textContent = t;
+    b.appendChild(iconWrap); b.appendChild(label);
     b.onclick = () => {
       autoSave();
       gradingToken++;
@@ -1130,7 +1139,13 @@ function renderSetup(el) {
       topLine.appendChild(removeBtn);
       row.appendChild(topLine);
 
-      // ── Bottom line: all 6 days as clickable pills (tap to toggle bath day) ──
+      // ── Bathroom days label ──
+      const bathDaysLbl = document.createElement('div');
+      bathDaysLbl.style.cssText = 'font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;margin-top:2px;';
+      bathDaysLbl.textContent = '🛁  Bathroom days';
+      row.appendChild(bathDaysLbl);
+
+      // ── Day pills: tap to toggle bath day ──
       const bathLine = document.createElement('div');
       bathLine.style.cssText = 'display:flex;gap:5px;flex-wrap:wrap;';
       DAYS.forEach(d => {
@@ -1163,16 +1178,47 @@ function renderSetup(el) {
   const addForm = document.createElement('div');
   addForm.className = 'child-add-form';
 
+  // Name input + Add button on one inline row
+  const nameRow = document.createElement('div');
+  nameRow.style.cssText = 'display:flex;gap:10px;align-items:center;margin-bottom:12px;';
+
   const nameInp = document.createElement('input');
   nameInp.type = 'text';
   nameInp.placeholder = "Child's name";
   nameInp.value = S.pendingChildName;
-  nameInp.style.cssText = 'border-bottom:1.5px solid var(--sep);padding:8px 0;font-size:17px;margin-bottom:12px;';
+  nameInp.style.cssText = 'flex:1;border-bottom:1.5px solid var(--sep);padding:8px 0;font-size:17px;';
   nameInp.oninput = () => { S.pendingChildName = nameInp.value; };  // no render()
 
+  const addBtn = document.createElement('button');
+  addBtn.className = 'btn btn-primary';
+  addBtn.style.cssText = 'flex-shrink:0;padding:9px 18px;font-size:15px;border-radius:10px;';
+  addBtn.textContent = '+ Add';
+  addBtn.onclick = () => {
+    // Read directly from the DOM element — more reliable than state on mobile
+    // (oninput may not fire before button click on some iOS browsers)
+    const name = (nameInp.value || S.pendingChildName || '').trim();
+    if (!name) { showMsg('Enter a name first', 'warn'); return; }
+    if (S.children.find(c => c.name.toLowerCase() === name.toLowerCase())) {
+      showMsg(`"${name}" already exists`, 'warn'); return;
+    }
+    const color = CHILD_COLORS[S.children.length % CHILD_COLORS.length];
+    const newChild = { name, color, bathDays: [...S.pendingBathDays] };
+    S.children.push(newChild);
+    S.scores[name] = {};
+    S.savedPhotos[name] = {};
+    if (!S.boy) S.boy = name;
+    S.pendingChildName = '';
+    S.pendingBathDays = [];
+    saveChildren();
+    showMsg(`${name} added!`, 'ok');
+  };
+
+  nameRow.appendChild(nameInp);
+  nameRow.appendChild(addBtn);
+
   const bathLbl = document.createElement('div');
-  bathLbl.style.cssText = 'font-size:13px;color:var(--muted);margin-bottom:4px;';
-  bathLbl.textContent = 'Bathroom days';
+  bathLbl.style.cssText = 'font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;';
+  bathLbl.textContent = '🛁  Bathroom days';
 
   // Use the same .day-row / .day-pill classes as the Grade tab's day selector
   const bathRow = document.createElement('div');
@@ -1194,34 +1240,9 @@ function renderSetup(el) {
     bathRow.appendChild(btn);
   });
 
-  const addBtn = document.createElement('button');
-  addBtn.className = 'btn btn-primary btn-full';
-  addBtn.style.marginTop = '12px';
-  addBtn.textContent = '+ Add Child';
-  addBtn.onclick = () => {
-    // Read directly from the DOM element — more reliable than state on mobile
-    // (oninput may not fire before button click on some iOS browsers)
-    const name = (nameInp.value || S.pendingChildName || '').trim();
-    if (!name) { showMsg('Enter a name first', 'warn'); return; }
-    if (S.children.find(c => c.name.toLowerCase() === name.toLowerCase())) {
-      showMsg(`"${name}" already exists`, 'warn'); return;
-    }
-    const color = CHILD_COLORS[S.children.length % CHILD_COLORS.length];
-    const newChild = { name, color, bathDays: [...S.pendingBathDays] };
-    S.children.push(newChild);
-    S.scores[name] = {};
-    S.savedPhotos[name] = {};
-    if (!S.boy) S.boy = name;
-    S.pendingChildName = '';
-    S.pendingBathDays = [];
-    saveChildren();
-    showMsg(`${name} added!`, 'ok');
-  };
-
-  addForm.appendChild(nameInp);
+  addForm.appendChild(nameRow);
   addForm.appendChild(bathLbl);
   addForm.appendChild(bathRow);
-  addForm.appendChild(addBtn);
   childCard.appendChild(addForm);
   el.appendChild(childCard);
 
@@ -1340,14 +1361,18 @@ function renderGrade(el) {
     return;
   }
 
-  // Segmented control — one segment per child
-  const segCtrl = document.createElement('div');
-  segCtrl.className = 'seg-control';
+  // Child selector — large colored buttons, one per child
+  const childSel = document.createElement('div');
+  childSel.className = 'child-selector';
   S.children.forEach(child => {
     const btn = document.createElement('button');
+    btn.className = 'child-btn';
     const isOn = S.boy === child.name;
-    btn.className = 'seg-btn' + (isOn ? ' on-child' : '');
-    if (isOn) btn.style.color = child.color;
+    if (isOn) {
+      btn.style.cssText = `background:${child.color};color:#fff;box-shadow:0 4px 14px ${child.color}66;`;
+    } else {
+      btn.style.cssText = `background:${child.color}22;color:${child.color};`;
+    }
     btn.textContent = child.name;
     btn.onclick = () => {
       if (S.boy === child.name) return;
@@ -1355,9 +1380,9 @@ function renderGrade(el) {
       gradingToken++; S.grading = false; S.gradePct = 0;
       S.boy = child.name; S.photos = {}; S.thumbs = {}; S.result = null; S.regrade = false; render();
     };
-    segCtrl.appendChild(btn);
+    childSel.appendChild(btn);
   });
-  el.appendChild(segCtrl);
+  el.appendChild(childSel);
 
   // Day selector
   const dayCard = mkCard('Select Day');
