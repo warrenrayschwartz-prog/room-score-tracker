@@ -1,3 +1,13 @@
-flask
-anthropic
-gunicorn
+flask>=3,<4
+anthropic>=0.40,<1
+gunicorn>=21,<24
+# Server-side account + data storage. Postgres on Railway via DATABASE_URL,
+# SQLite fallback for local dev when DATABASE_URL is unset.
+SQLAlchemy>=2.0,<3
+psycopg2-binary>=2.9,<3
+# Auth: Apple Sign In verifies the identity token (RS256 against Apple's
+# JWKS). Email/password hashing uses werkzeug and session tokens use
+# itsdangerous, both of which ship with Flask (no extra dependency).
+PyJWT[crypto]>=2.8,<3
+# Used to verify Google ID tokens against Google's tokeninfo endpoint.
+requests>=2.31,<3

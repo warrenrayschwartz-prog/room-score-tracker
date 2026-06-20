@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>Room Score Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <!-- Social sign-in SDKs (only used when Google/Apple are configured on the server) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script type="text/javascript" src="https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js" async defer></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -466,7 +469,7 @@ const BATH_CATS = [
 // ─── State ──────────────────────────────────────────────────────────────────
 const S = {
   tab:        'grade',
-  boy:        '',          // active child name — set after loadState()
+  boy:        '',          // active child name — set after loadData()
   day:        todayDay(),
   children:   [],          // [{ name, color, bathDays }]
   scores:     {},          // { [childName]: { [day]: entry } }
@@ -543,109 +546,94 @@ function isBathDay(boy, day) {
   return child && Array.isArray(child.bathDays) ? child.bathDays.includes(day) : false;
 }
 
-// ─── IndexedDB Photo Storage ─────────────────────────────────────────────────
-let _photoDB = null;
-function _openDB() {
-  if (_photoDB) return Promise.resolve(_photoDB);
-  return new Promise((res, rej) => {
-    const r = indexedDB.open('rsc_photos', 1);
-    r.onupgradeneeded = e => e.target.result.createObjectStore('photos');
-    r.onsuccess = e => { _photoDB = e.target.result; res(_photoDB); };
-    r.onerror = e => rej(e.target.error);
-  });
-}
-async function _loadAllPhotos() {
-  try {
-    const db = await _openDB();
-    return new Promise(res => {
-      // Build output keyed by all known child names
-      const out = {};
-      S.children.forEach(c => { out[c.name] = {}; });
-      db.transaction('photos','readonly').objectStore('photos').openCursor().onsuccess = e => {
-        const cur = e.target.result;
-        if (!cur) { res(out); return; }
-        const [boy, day] = cur.key.split('|');
-        if (out[boy]) out[boy][day] = cur.value;
-        cur.continue();
-      };
+// ─── API client + auth ───────────────────────────────────────────────────────
+const API = {
+  token: '',
+  async req(method, path, body) {
+    const headers = {};
+    if (body !== undefined) headers['content-type'] = 'application/json';
+    if (this.token) headers['X-User-Id'] = this.token;
+    const res = await fetch(path, {
+      method, headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
     });
-  } catch(e) {
-    const out = {};
-    S.children.forEach(c => { out[c.name] = {}; });
-    return out;
-  }
-}
-async function _putPhoto(boy, day, photos) {
+    let data = null;
+    try { data = await res.json(); } catch(e) {}
+    if (!res.ok) {
+      const err = new Error((data && data.error) || ('HTTP ' + res.status));
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  },
+};
+
+const AUTH = { google: false, apple: false, googleClientId: '', appleClientId: '' };
+async function loadAuthConfig() {
   try {
-    const db = await _openDB();
-    const tx = db.transaction('photos','readwrite');
-    tx.objectStore('photos').put(photos, `${boy}|${day}`);
+    const c = await API.req('GET', '/api/auth/config');
+    AUTH.google = !!c.google; AUTH.apple = !!c.apple;
+    AUTH.googleClientId = c.googleClientId || '';
+    AUTH.appleClientId = c.appleClientId || '';
   } catch(e) {}
+}
+
+// ─── Server-backed photo storage (kind='photo', key=`${boy}|${day}`) ──────────
+async function _putPhoto(boy, day, photos) {
+  try { await API.req('PUT', '/api/image', { kind:'photo', key:`${boy}|${day}`, data: JSON.stringify(photos || {}) }); } catch(e) {}
 }
 async function _deletePhoto(boy, day) {
-  try {
-    const db = await _openDB();
-    db.transaction('photos','readwrite').objectStore('photos').delete(`${boy}|${day}`);
-  } catch(e) {}
+  try { await API.req('DELETE', '/api/image', { kind:'photo', key:`${boy}|${day}` }); } catch(e) {}
 }
 
-// ─── Persistence ─────────────────────────────────────────────────────────────
-
-function loadState() {
+// ─── Load everything for the signed-in user ───────────────────────────────────
+async function loadData() {
   try {
-    // Settings
-    const d = localStorage.getItem('rsc_difficulty');
-    if (d) { const n = parseInt(d,10); if (n>=1 && n<=5) S.difficulty = n; }
-    const ma = localStorage.getItem('rsc_maxAllowance');
-    if (ma) { const n = parseFloat(ma); if (!isNaN(n) && n >= 0) S.maxAllowance = n; }
+    const d = await API.req('GET', '/api/data');
+    const st = d.state || {};
+    S.children = Array.isArray(st.children) ? st.children : [];
+    S.children.forEach(c => { if (!Array.isArray(c.bathDays)) c.bathDays = []; });
+    S.scores = (st.scores && typeof st.scores === 'object') ? st.scores : {};
+    S.difficulty = (st.difficulty >= 1 && st.difficulty <= 5) ? st.difficulty : 3;
+    S.maxAllowance = (typeof st.maxAllowance === 'number' && st.maxAllowance >= 0) ? st.maxAllowance : 50;
+    S.baselines = (d.baselines && typeof d.baselines === 'object') ? d.baselines : {};
 
-    // Baselines
-    const bl = localStorage.getItem('rsc_baselines_v1');
-    if (bl) S.baselines = JSON.parse(bl);
-
-    // Children — with migration from old fixed Wesley/Walker format
-    const chRaw = localStorage.getItem('rsc_children');
-    if (chRaw) {
-      S.children = JSON.parse(chRaw);
-      // Guard: ensure every child has a valid bathDays array
-      // (older saved data may be missing this field entirely)
-      S.children.forEach(c => { if (!Array.isArray(c.bathDays)) c.bathDays = []; });
-    } else {
-      // Auto-migrate: if scores exist for Wesley and/or Walker, create those children
-      const scRaw = localStorage.getItem('rsc_scores_v4');
-      if (scRaw) {
-        const p = JSON.parse(scRaw);
-        if (p.Wesley) S.children.push({ name:'Wesley', color:'#5856D6', bathDays:['Mon','Wed','Fri'] });
-        if (p.Walker) S.children.push({ name:'Walker', color:'#FF2D55', bathDays:['Tue','Thu','Sat'] });
-      }
-      if (S.children.length) saveChildren();
-    }
-
-    // Set default active child
-    S.boy = S.children[0]?.name || '';
-
-    // Initialize score/photo structures for every child
+    S.savedPhotos = {};
     S.children.forEach(c => {
-      S.scores[c.name] = {};
+      if (!S.scores[c.name]) S.scores[c.name] = {};
       S.savedPhotos[c.name] = {};
     });
+    Object.entries(d.photos || {}).forEach(([key, photos]) => {
+      const idx = key.indexOf('|');
+      const boy = key.slice(0, idx), day = key.slice(idx + 1);
+      if (!S.savedPhotos[boy]) S.savedPhotos[boy] = {};
+      S.savedPhotos[boy][day] = photos;
+    });
 
-    // Load saved scores
-    const scRaw = localStorage.getItem('rsc_scores_v4');
-    if (scRaw) {
-      const p = JSON.parse(scRaw);
-      S.children.forEach(child => {
-        const days = p[child.name] || {};
-        Object.keys(days).forEach(day => { delete days[day].photos; });
-        S.scores[child.name] = days;
-      });
-    }
-  } catch(e) {}
+    S.boy = S.children[0]?.name || '';
+    return true;
+  } catch(e) {
+    return false;
+  }
 }
 
-function saveScores() {
-  try { localStorage.setItem('rsc_scores_v4', JSON.stringify(S.scores)); } catch(e) { showMsg('Storage error saving scores', 'err'); }
+// ─── Persistence (server-backed) ──────────────────────────────────────────────
+let _stateTimer = null;
+function saveState() {
+  if (_stateTimer) clearTimeout(_stateTimer);
+  _stateTimer = setTimeout(() => {
+    API.req('PUT', '/api/state', {
+      children: S.children, scores: S.scores,
+      difficulty: S.difficulty, maxAllowance: S.maxAllowance,
+    }).catch(() => showMsg('Could not save — check your connection', 'err'));
+  }, 400);
 }
+// Children, scores, and settings all live in one state document.
+function saveScores()       { saveState(); }
+function saveChildren()     { saveState(); }
+function saveDifficulty()   { saveState(); }
+function saveMaxAllowance() { saveState(); }
+
 function savePhotos() {
   S.children.forEach(c =>
     Object.entries(S.savedPhotos[c.name] || {}).forEach(([day, photos]) =>
@@ -653,10 +641,91 @@ function savePhotos() {
     )
   );
 }
-function saveChildren()     { try { localStorage.setItem('rsc_children',       JSON.stringify(S.children)); } catch(e) {} }
-function saveBaselines()    { try { localStorage.setItem('rsc_baselines_v1',    JSON.stringify(S.baselines)); } catch(e) { showMsg('Storage error — try freeing space','err'); } }
-function saveDifficulty()   { try { localStorage.setItem('rsc_difficulty',      String(S.difficulty)); } catch(e) {} }
-function saveMaxAllowance() { try { localStorage.setItem('rsc_maxAllowance',    String(S.maxAllowance)); } catch(e) {} }
+
+let _blTimer = null;
+function saveBaselines() {
+  // Bulk replace the user's baseline set (handles add, remove, and restore).
+  if (_blTimer) clearTimeout(_blTimer);
+  _blTimer = setTimeout(() => {
+    API.req('PUT', '/api/baselines', { baselines: S.baselines })
+      .catch(() => showMsg('Could not save baselines — check your connection', 'err'));
+  }, 400);
+}
+
+// ─── One-time carry-over of existing on-device data into a new account ─────────
+function _readLegacyIDB() {
+  return new Promise(res => {
+    try {
+      const r = indexedDB.open('rsc_photos', 1);
+      r.onupgradeneeded = e => { try { e.target.result.createObjectStore('photos'); } catch(_) {} };
+      r.onsuccess = e => {
+        const db = e.target.result; const out = {};
+        try {
+          db.transaction('photos', 'readonly').objectStore('photos').openCursor().onsuccess = ev => {
+            const cur = ev.target.result;
+            if (!cur) { res(out); return; }
+            out[cur.key] = cur.value;   // key is already `boy|day`
+            cur.continue();
+          };
+        } catch(_) { res(out); }
+      };
+      r.onerror = () => res({});
+    } catch(_) { res({}); }
+  });
+}
+async function maybeMigrateLocalData() {
+  try {
+    let children = [];
+    let scores = {};
+    const chRaw = localStorage.getItem('rsc_children');
+    const scRaw = localStorage.getItem('rsc_scores_v4');
+    if (scRaw) { try { scores = JSON.parse(scRaw) || {}; } catch(_) {} }
+    if (chRaw) { try { children = JSON.parse(chRaw) || []; } catch(_) {} }
+    else {
+      if (scores.Wesley) children.push({ name:'Wesley', color:'#5856D6', bathDays:['Mon','Wed','Fri'] });
+      if (scores.Walker) children.push({ name:'Walker', color:'#FF2D55', bathDays:['Tue','Thu','Sat'] });
+    }
+    children.forEach(c => { if (!Array.isArray(c.bathDays)) c.bathDays = []; });
+    const diff = parseInt(localStorage.getItem('rsc_difficulty') || '', 10);
+    const ma = parseFloat(localStorage.getItem('rsc_maxAllowance') || '');
+    let baselines = {};
+    const bl = localStorage.getItem('rsc_baselines_v1');
+    if (bl) { try { baselines = JSON.parse(bl) || {}; } catch(_) {} }
+    const photos = await _readLegacyIDB();
+    const hasAny = children.length || Object.keys(scores).length ||
+                   Object.keys(baselines).length || Object.keys(photos).length;
+    if (!hasAny) return;
+    await API.req('POST', '/api/migrate', {
+      state: {
+        children, scores,
+        difficulty: (diff >= 1 && diff <= 5) ? diff : 3,
+        maxAllowance: (!isNaN(ma) && ma >= 0) ? ma : 50,
+      },
+      baselines,
+      photos,
+    });
+  } catch(e) {}
+}
+
+// ─── Auth flow helpers ────────────────────────────────────────────────────────
+async function onAuthSuccess(resp, isSignup) {
+  API.token = resp.token;
+  localStorage.setItem('rsc_token', resp.token);
+  S.account = resp.account || null;
+  if (isSignup) { await maybeMigrateLocalData(); }
+  await loadData();
+  S.authed = true; S.tab = 'grade'; S.msg = '';
+  render();
+}
+function logout() {
+  API.token = '';
+  localStorage.removeItem('rsc_token');
+  S.authed = false; S.account = null;
+  S.children = []; S.scores = {}; S.baselines = {}; S.savedPhotos = {};
+  S.boy = ''; S.result = null; S.regrade = false; S.photos = {}; S.thumbs = {};
+  S.msg = '';
+  render();
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 let msgTimer = null;
@@ -901,7 +970,7 @@ async function gradePhotos() {
 
     const res = await fetch('/grade', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'X-User-Id': API.token },
       body: JSON.stringify({ content }),
     });
 
@@ -1004,7 +1073,182 @@ function restoreBaselines() {
 }
 
 // ─── Rendering ───────────────────────────────────────────────────────────────
-function render() { renderTabs(); renderPage(); }
+function render() {
+  const tabsEl = document.getElementById('tabs');
+  if (!S.authed) {
+    if (tabsEl) tabsEl.style.display = 'none';
+    renderHeaderActions();
+    renderAuthScreen();
+    return;
+  }
+  if (tabsEl) tabsEl.style.display = '';
+  renderHeaderActions();
+  renderTabs();
+  renderPage();
+}
+
+// Show a "Sign out" button in the header only when signed in.
+function renderHeaderActions() {
+  let btn = document.getElementById('signout-btn');
+  if (S.authed) {
+    if (!btn) {
+      const hdr = document.querySelector('.hdr');
+      btn = document.createElement('button');
+      btn.id = 'signout-btn';
+      btn.className = 'no-print';
+      btn.style.cssText = 'position:absolute;right:12px;top:11px;background:none;border:none;color:var(--accent);font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;';
+      btn.textContent = 'Sign out';
+      btn.onclick = () => { autoSave(); logout(); };
+      hdr.appendChild(btn);
+    }
+    btn.style.display = '';
+  } else if (btn) {
+    btn.style.display = 'none';
+  }
+}
+
+// ── Auth screen (login / signup) ──
+function renderAuthScreen() {
+  const el = document.getElementById('page');
+  el.innerHTML = '';
+
+  const mode = S.authMode || 'login';   // 'login' | 'signup'
+
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.style.cssText = 'max-width:380px;margin:24px auto 16px;padding:24px 20px;';
+
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:22px;font-weight:700;letter-spacing:-0.4px;text-align:center;margin-bottom:4px;';
+  title.textContent = mode === 'login' ? 'Welcome back' : 'Create your account';
+  card.appendChild(title);
+
+  const sub = document.createElement('div');
+  sub.style.cssText = 'font-size:14px;color:var(--muted);text-align:center;margin-bottom:20px;line-height:1.4;';
+  sub.textContent = mode === 'login'
+    ? 'Sign in to see your children and scores.'
+    : 'Your children, scores, and photos are saved to your account and never lost.';
+  card.appendChild(sub);
+
+  if (S.msg) {
+    const bar = document.createElement('div');
+    bar.className = 'msg ' + S.msgType;
+    bar.style.margin = '0 0 14px';
+    bar.textContent = S.msg;
+    card.appendChild(bar);
+  }
+
+  const emailInp = document.createElement('input');
+  emailInp.type = 'email'; emailInp.placeholder = 'Email';
+  emailInp.autocomplete = 'email';
+  emailInp.style.cssText = 'border:1.5px solid var(--sep);border-radius:10px;padding:12px 14px;font-size:16px;margin-bottom:10px;';
+  card.appendChild(emailInp);
+
+  const pwInp = document.createElement('input');
+  pwInp.type = 'password';
+  pwInp.placeholder = mode === 'login' ? 'Password' : 'Password (8+ characters)';
+  pwInp.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
+  pwInp.style.cssText = 'border:1.5px solid var(--sep);border-radius:10px;padding:12px 14px;font-size:16px;margin-bottom:14px;';
+  card.appendChild(pwInp);
+
+  const submit = document.createElement('button');
+  submit.className = 'btn btn-primary btn-full';
+  submit.textContent = mode === 'login' ? 'Sign in' : 'Create account';
+  submit.onclick = async () => {
+    const email = emailInp.value.trim();
+    const password = pwInp.value;
+    if (!email) { showMsg('Enter your email', 'warn'); return; }
+    if (!password) { showMsg('Enter your password', 'warn'); return; }
+    submit.disabled = true; submit.textContent = mode === 'login' ? 'Signing in…' : 'Creating…';
+    try {
+      const path = mode === 'login' ? '/api/auth/login' : '/api/auth/signup';
+      const resp = await API.req('POST', path, { email, password });
+      await onAuthSuccess(resp, mode === 'signup');
+    } catch(e) {
+      showMsg(e.message || 'Something went wrong', 'err');
+      submit.disabled = false; submit.textContent = mode === 'login' ? 'Sign in' : 'Create account';
+    }
+  };
+  pwInp.onkeydown = e => { if (e.key === 'Enter') submit.click(); };
+  card.appendChild(submit);
+
+  // Social sign-in (only shown when configured on the server)
+  if (AUTH.google || AUTH.apple) {
+    const or = document.createElement('div');
+    or.style.cssText = 'text-align:center;color:var(--muted);font-size:12px;margin:16px 0 12px;';
+    or.textContent = 'or';
+    card.appendChild(or);
+
+    if (AUTH.google) {
+      const gBtn = document.createElement('button');
+      gBtn.className = 'btn btn-full';
+      gBtn.style.cssText = 'background:#fff;color:#3c4043;border:1.5px solid var(--sep);margin-bottom:8px;';
+      gBtn.textContent = 'Continue with Google';
+      gBtn.onclick = () => startGoogleSignIn();
+      card.appendChild(gBtn);
+    }
+    if (AUTH.apple) {
+      const aBtn = document.createElement('button');
+      aBtn.className = 'btn btn-full';
+      aBtn.style.cssText = 'background:#000;color:#fff;';
+      aBtn.textContent = ' Continue with Apple';
+      aBtn.onclick = () => startAppleSignIn();
+      card.appendChild(aBtn);
+    }
+  }
+
+  const toggle = document.createElement('div');
+  toggle.style.cssText = 'text-align:center;font-size:14px;color:var(--muted);margin-top:18px;';
+  toggle.innerHTML = mode === 'login'
+    ? `New here? <span style="color:var(--accent);font-weight:600;cursor:pointer">Create an account</span>`
+    : `Already have an account? <span style="color:var(--accent);font-weight:600;cursor:pointer">Sign in</span>`;
+  toggle.querySelector('span').onclick = () => {
+    S.authMode = mode === 'login' ? 'signup' : 'login';
+    S.msg = '';
+    render();
+  };
+  card.appendChild(toggle);
+
+  el.appendChild(card);
+}
+
+// Social sign-in stubs — wired to Google Identity Services / Apple JS when
+// those providers are configured on the server (GOOGLE_CLIENT_ID / APPLE_CLIENT_ID).
+function startGoogleSignIn() {
+  if (!(window.google && google.accounts && google.accounts.id)) {
+    showMsg('Google sign-in is still loading — try again in a moment.', 'warn');
+    return;
+  }
+  google.accounts.id.initialize({
+    client_id: AUTH.googleClientId,
+    callback: async (resp) => {
+      try {
+        const r = await API.req('POST', '/api/auth/google', { credential: resp.credential });
+        await onAuthSuccess(r, true);
+      } catch(e) { showMsg(e.message || 'Google sign-in failed', 'err'); }
+    },
+  });
+  google.accounts.id.prompt();
+}
+function startAppleSignIn() {
+  if (!(window.AppleID && AppleID.auth)) {
+    showMsg('Apple sign-in is still loading — try again in a moment.', 'warn');
+    return;
+  }
+  AppleID.auth.init({
+    clientId: AUTH.appleClientId,
+    scope: 'email',
+    redirectURI: window.location.origin,
+    usePopup: true,
+  });
+  AppleID.auth.signIn().then(async (resp) => {
+    try {
+      const token = resp && resp.authorization && resp.authorization.id_token;
+      const r = await API.req('POST', '/api/auth/apple', { identityToken: token });
+      await onAuthSuccess(r, true);
+    } catch(e) { showMsg(e.message || 'Apple sign-in failed', 'err'); }
+  }).catch(() => {});
+}
 
 const TAB_SVGS = {
   grade: `<svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`,
@@ -1809,29 +2053,26 @@ function mkCard(title) {
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
-  loadState();
+  S.authed = false;
+  API.token = localStorage.getItem('rsc_token') || '';
 
-  // Migrate any photos previously saved to localStorage into IndexedDB, then clear
-  const legacy = localStorage.getItem('rsc_photos_v1');
-  if (legacy) {
-    try {
-      const p = JSON.parse(legacy);
-      S.children.forEach(c => {
-        Object.entries(p[c.name] || {}).forEach(([day, photos]) => {
-          S.savedPhotos[c.name][day] = photos;
-          _putPhoto(c.name, day, photos);
-        });
-      });
-      localStorage.removeItem('rsc_photos_v1');
-    } catch(e) {}
+  // Find out which social sign-in buttons to show.
+  await loadAuthConfig();
+
+  // If we have a saved token, try to load the account's data. A 401 means
+  // the token is stale — fall through to the sign-in screen.
+  if (API.token) {
+    const ok = await loadData();
+    if (ok) {
+      S.authed = true;
+      render();
+      return;
+    }
+    API.token = '';
+    localStorage.removeItem('rsc_token');
   }
 
-  // Load photos from IndexedDB (async)
-  const stored = await _loadAllPhotos();
-  S.children.forEach(c => {
-    Object.assign(S.savedPhotos[c.name], stored[c.name] || {});
-  });
-
+  S.authMode = 'login';
   render();
 }
 init();
