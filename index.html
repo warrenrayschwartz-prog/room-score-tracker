@@ -536,6 +536,17 @@ const BATH_CATS = [
   { key:'counter', label:'Counter',       max:10 },
 ];
 
+// ─── Configurable rooms ───────────────────────────────────────────────────────
+// Each room: id, name, base (# baseline photos), daily (# daily photos),
+// points (max score it contributes), everyday (graded daily vs only on the
+// child's scheduled days), shared (one baseline set for all kids vs per-child).
+// Defaults reproduce the original Bedroom (everyday) + Bathroom (scheduled).
+const DEFAULT_ROOMS = [
+  { id: 'bedroom',  name: 'Bedroom',  base: 4, daily: 2, points: 60, everyday: true,  shared: false },
+  { id: 'bathroom', name: 'Bathroom', base: 3, daily: 3, points: 30, everyday: false, shared: true  },
+];
+function genRoomId() { return 'room_' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36); }
+
 // ─── State ──────────────────────────────────────────────────────────────────
 const S = {
   tab:        'grade',
@@ -555,6 +566,7 @@ const S = {
   msgType:    'ok',
   difficulty:    3,
   maxAllowance:  50,
+  rooms:      [],          // configurable room definitions (see DEFAULT_ROOMS)
   // Pending "add child" form state — persists across re-renders
   pendingChildName: '',
   pendingBathDays:  [],
@@ -624,6 +636,32 @@ function getChild(name) { return S.children.find(c => c.name === name) || null; 
 function isBathDay(boy, day) {
   const child = getChild(boy);
   return child && Array.isArray(child.bathDays) ? child.bathDays.includes(day) : false;
+}
+// "Scheduled days" = the child's selected days when non-everyday rooms are graded.
+function isScheduledDay(boy, day) { return isBathDay(boy, day); }
+
+// ─── Room helpers ─────────────────────────────────────────────────────────────
+function allRooms() { return Array.isArray(S.rooms) ? S.rooms : []; }
+// Rooms graded for a given child+day: every-day rooms always, scheduled rooms
+// only on the child's scheduled days.
+function roomsForDay(boy, day) {
+  return allRooms().filter(r => r.everyday || isScheduledDay(boy, day));
+}
+// Baseline storage key for slot i of a room (shared rooms use one set for all).
+function baseKey(room, boy, i) { return (room.shared ? 'shared' : boy) + '|' + room.id + '|' + i; }
+// Daily photo slot id for slot i of a room (within S.photos / thumbs).
+function dailySlotId(room, i) { return room.id + '|' + i; }
+function slotLabel(room, i, n) { return n > 1 ? `${room.name} ${i + 1}` : room.name; }
+
+// Day total / max for a saved entry — supports v2 (per-room) and legacy
+// (floor/desk/trash[/sink/towels/counter]) shapes.
+function entryTotal(e) {
+  if (e && e.scores) { let t = 0; for (const k in e.scores) t += (e.scores[k].s || 0); return t; }
+  return roomScore(e) + (e && e.hasBath ? bathScore(e) : 0);
+}
+function entryMax(e) {
+  if (e && e.scores) { let m = 0; for (const k in e.scores) m += (e.scores[k].max || 0); return m; }
+  return 60 + (e && e.hasBath ? 30 : 0);
 }
 
 // ─── API client + auth ───────────────────────────────────────────────────────
@@ -764,6 +802,13 @@ async function loadData() {
     S.scores = (st.scores && typeof st.scores === 'object') ? st.scores : {};
     S.difficulty = (st.difficulty >= 1 && st.difficulty <= 5) ? st.difficulty : 3;
     S.maxAllowance = (typeof st.maxAllowance === 'number' && st.maxAllowance >= 0) ? st.maxAllowance : 50;
+    // Rooms config — seed the defaults (Bedroom + Bathroom) for existing
+    // accounts that predate configurable rooms.
+    S.rooms = (Array.isArray(st.rooms) && st.rooms.length)
+      ? st.rooms.map(r => ({ id: r.id || genRoomId(), name: r.name || 'Room',
+          base: Math.max(1, r.base | 0 || 1), daily: Math.max(1, r.daily | 0 || 1),
+          points: Math.max(1, r.points | 0 || 10), everyday: r.everyday !== false, shared: !!r.shared }))
+      : DEFAULT_ROOMS.map(r => ({ ...r }));
     S.baselines = (d.baselines && typeof d.baselines === 'object') ? d.baselines : {};
 
     S.savedPhotos = {};
@@ -787,11 +832,12 @@ function saveState() {
   _stateTimer = setTimeout(() => {
     API.req('PUT', '/api/state', {
       children: S.children, scores: S.scores,
-      difficulty: S.difficulty, maxAllowance: S.maxAllowance,
+      difficulty: S.difficulty, maxAllowance: S.maxAllowance, rooms: S.rooms,
     }).catch(() => showMsg('Could not save — check your connection', 'err'));
   }, 400);
 }
-// Children, scores, and settings all live in one state document.
+// Children, scores, settings, and rooms all live in one state document.
+function saveRooms()        { saveState(); }
 function saveScores()       { saveState(); }
 function saveChildren()     { saveState(); }
 function saveDifficulty()   { saveState(); }
@@ -970,27 +1016,25 @@ function calcWeekly(boy) {
   if (!child) return null;
   const entries = Object.entries(S.scores[boy] || {});
   if (!entries.length) return null;
-  const roomDays = entries.filter(([,e]) => e.floor != null);
-  const bathDays = entries.filter(([,e]) => e.hasBath);
   let earned = 0, possible = 0;
-  roomDays.forEach(([,e]) => { earned += roomScore(e); possible += 60; });
-  bathDays.forEach(([,e]) => { earned += bathScore(e); possible += 30; });
+  entries.forEach(([, e]) => { earned += entryTotal(e); possible += entryMax(e); });
   const pct = possible > 0 ? Math.round((earned / possible) * 100) : 0;
 
+  // Projection: assume full marks on the days not yet graded, using the
+  // points of whichever rooms would be graded that day.
   const gradedSet = new Set(entries.map(([d]) => d));
   const ungradedDays = DAYS.filter(d => !gradedSet.has(d));
   let ungradedMax = 0;
   ungradedDays.forEach(d => {
-    ungradedMax += 60;
-    if (Array.isArray(child.bathDays) && child.bathDays.includes(d)) ungradedMax += 30;
+    ungradedMax += roomsForDay(boy, d).reduce((s, r) => s + (r.points || 0), 0);
   });
   const projEarned   = earned + ungradedMax;
   const projPossible = possible + ungradedMax;
   const projPct = projPossible > 0 ? Math.round((projEarned / projPossible) * 100) : 0;
-  const daysGraded = roomDays.length;
+  const daysGraded = entries.length;
   const totalDays  = DAYS.length;
 
-  return { pct, projPct, earned, possible, daysGraded, totalDays, roomDays: roomDays.length, bathDays: bathDays.length };
+  return { pct, projPct, earned, possible, daysGraded, totalDays };
 }
 
 function scoreColor(s, max) {
@@ -1103,24 +1147,29 @@ function makeSlot(uid, label, initB64, onDone, isBaseline, onThumb) {
 }
 
 // ─── AI Grading ──────────────────────────────────────────────────────────────
+function _imgBlock(b64) {
+  return { type:'image', source:{ type:'base64',
+    media_type: b64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg',
+    data: b64.split(',')[1] } };
+}
+
 async function gradePhotos() {
   const boy = S.boy, day = S.day;
-  const hasBath = isBathDay(boy, day);
+  const active = roomsForDay(boy, day);
+  if (!active.length) { showMsg('No rooms to grade today. Add a room in Setup.', 'warn'); return; }
 
-  for (const sl of BASE_ROOM) {
-    if (!S.baselines[`${boy}|${sl.id}`]) { showMsg(`Missing ${boy} baseline: ${sl.label}`,'warn'); return; }
-  }
-  if (hasBath) {
-    for (const sl of BASE_BATH) {
-      if (!S.baselines[`shared|${sl.id}`]) { showMsg(`Missing bathroom baseline: ${sl.label}`,'warn'); return; }
+  // Validate baseline photos for each active room.
+  for (const room of active) {
+    for (let i = 0; i < room.base; i++) {
+      if (!S.baselines[baseKey(room, boy, i)]) {
+        showMsg(`Missing ${room.name} baseline photo ${i + 1} — add it in Setup.`, 'warn'); return;
+      }
     }
   }
-  for (const sl of DAILY_ROOM) {
-    if (!S.photos[sl.id]) { showMsg(`Add ${sl.label} first`,'warn'); return; }
-  }
-  if (hasBath) {
-    for (const sl of DAILY_BATH) {
-      if (!S.photos[sl.id]) { showMsg(`${day} is a bathroom day — also need: ${sl.label}`,'warn'); return; }
+  // Validate today's photos for each active room.
+  for (const room of active) {
+    for (let i = 0; i < room.daily; i++) {
+      if (!S.photos[dailySlotId(room, i)]) { showMsg(`Add ${slotLabel(room, i, room.daily)} first`, 'warn'); return; }
     }
   }
 
@@ -1131,53 +1180,24 @@ async function gradePhotos() {
 
   try {
     const content = [];
-
     const diff = DIFFICULTY[S.difficulty - 1];
     content.push({ type:'text', text:
-      `You are grading ${boy}'s room for ${day}. Difficulty level: ${diff.level}/5 (${diff.label}). Use a ${diff.lens}.\n\nCRITICAL: Compare each current photo directly against the matching baseline. Items present in the baseline photo (furniture, cables, bean bags, decor, permanent desk items, etc.) are NEVER penalized — they are part of the room's normal state. Only deduct for items that appear ADDED or WORSENED relative to baseline.`
+      `You are grading ${boy}'s rooms for ${day}. Difficulty level: ${diff.level}/5 (${diff.label}). Use a ${diff.lens}.\n\nCRITICAL: For each room, compare the current photos directly against that room's baseline photos. Anything already present in the baseline (furniture, cables, decor, permanent items) is NEVER penalized — it's the room's normal state. Only deduct for mess that appears ADDED or WORSENED relative to the baseline.`
     });
 
-    content.push({ type:'text', text:`--- ${boy.toUpperCase()} BEDROOM BASELINES ---` });
-    for (const sl of BASE_ROOM) {
-      const b64 = S.baselines[`${boy}|${sl.id}`];
-      content.push({ type:'text', text:`Baseline: ${sl.label}` });
-      content.push({ type:'image', source:{ type:'base64', media_type: b64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg', data: b64.split(',')[1] } });
-    }
-
-    if (hasBath) {
-      content.push({ type:'text', text:`--- SHARED BATHROOM BASELINES ---` });
-      for (const sl of BASE_BATH) {
-        const b64 = S.baselines[`shared|${sl.id}`];
-        content.push({ type:'text', text:`Baseline: ${sl.label}` });
-        content.push({ type:'image', source:{ type:'base64', media_type: b64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg', data: b64.split(',')[1] } });
-      }
-    }
-
-    S.gradePct = 30; render();
-
-    content.push({ type:'text', text:`--- TODAY'S BEDROOM PHOTOS ---` });
-    for (const sl of DAILY_ROOM) {
-      const b64 = S.photos[sl.id];
-      content.push({ type:'text', text:`Current: ${sl.label}` });
-      content.push({ type:'image', source:{ type:'base64', media_type: b64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg', data: b64.split(',')[1] } });
-    }
-
-    if (hasBath) {
-      content.push({ type:'text', text:`--- TODAY'S BATHROOM PHOTOS ---` });
-      for (const sl of DAILY_BATH) {
-        const b64 = S.photos[sl.id];
-        content.push({ type:'text', text:`Current: ${sl.label}` });
-        content.push({ type:'image', source:{ type:'base64', media_type: b64.startsWith('data:image/png') ? 'image/png' : 'image/jpeg', data: b64.split(',')[1] } });
-      }
+    for (const room of active) {
+      content.push({ type:'text', text:`--- ${room.name.toUpperCase()} — BASELINE (clean / expected) ---` });
+      for (let i = 0; i < room.base; i++) content.push(_imgBlock(S.baselines[baseKey(room, boy, i)]));
+      content.push({ type:'text', text:`--- ${room.name.toUpperCase()} — TODAY'S PHOTOS ---` });
+      for (let i = 0; i < room.daily; i++) content.push(_imgBlock(S.photos[dailySlotId(room, i)]));
     }
 
     S.gradePct = 55; render();
 
-    const bathSection = hasBath
-      ? `\nBathroom (graded today because it's ${boy}'s bathroom day):\n- sink: 0–12 pts (${diff.sink})\n- towels: 0–8 pts (${diff.towels})\n- counter: 0–10 pts (${diff.counter})`
-      : '';
+    const rules = active.map(r => `- "${r.id}" (${r.name}): score 0 to ${r.points}`).join('\n');
+    const example = '{' + active.map(r => `"${r.id}":{"s":${Math.round(r.points * 0.9)},"n":"brief note"}`).join(',') + '}';
     content.push({ type:'text', text:
-      `--- SCORING RULES (Difficulty ${diff.level}/5: ${diff.label}) ---\nBedroom (always graded):\n- floor: 0–25 pts (${diff.floor})\n- desk: 0–20 pts (${diff.desk})\n- trash: 0–15 pts (${diff.trash})${bathSection}\n\nReturn ONLY a compact JSON object — no markdown, no explanation. Keys: floor, desk, trash${hasBath ? ', sink, towels, counter' : ''}. Each value: {"s": <score>, "n": "<brief note>"}.\n\nExample: {"floor":{"s":22,"n":"minor item near desk"},"desk":{"s":18,"n":"mostly clear"},"trash":{"s":15,"n":"not overflowing"}${hasBath ? ',"sink":{"s":10,"n":"small toothpaste spot"},"towels":{"s":8,"n":"all hung"},"counter":{"s":9,"n":"soap bottle only"}' : ''}}`
+      `--- SCORING RULES (Difficulty ${diff.level}/5: ${diff.label}) ---\nScore each room from 0 to its maximum, judging tidiness/cleanliness against that room's baseline with the ${diff.label} lens:\n${rules}\n\nReturn ONLY a compact JSON object — no markdown, no explanation. One key per room id listed above; each value is {"s": <score>, "n": "<brief note>"}.\nExample: ${example}`
     });
 
     S.gradePct = 65; render();
@@ -1225,15 +1245,24 @@ async function gradePhotos() {
   }
 }
 
+// Build a v2 saved entry (per-room scores) from an AI result for boy/day.
+function buildEntry(boy, day, result) {
+  const scores = {};
+  roomsForDay(boy, day).forEach(r => {
+    const raw = (result && result[r.id]) || {};
+    let s = typeof raw.s === 'number' ? raw.s : parseInt(raw.s, 10);
+    if (!Number.isFinite(s)) s = 0;
+    s = Math.max(0, Math.min(r.points, s));
+    scores[r.id] = { s, max: r.points, n: raw.n || '', name: r.name };
+  });
+  return { v: 2, scores };
+}
+
 async function saveResult() {
   if (!S.result) return;
-  const r = S.result;
   const boy = S.boy, day = S.day;
-  const hasBath = isBathDay(boy, day);
-  const entry = { hasBath, floor: r.floor?.s??0, desk: r.desk?.s??0, trash: r.trash?.s??0 };
-  if (hasBath) { entry.sink = r.sink?.s??0; entry.towels = r.towels?.s??0; entry.counter = r.counter?.s??0; }
   if (!S.scores[boy]) S.scores[boy] = {};
-  S.scores[boy][day] = entry;
+  S.scores[boy][day] = buildEntry(boy, day, S.result);
   if (!S.savedPhotos[boy]) S.savedPhotos[boy] = {};
   const photos = { ...S.thumbs };
   S.savedPhotos[boy][day] = photos;
@@ -1247,13 +1276,9 @@ async function saveResult() {
 
 function autoSave() {
   if (!S.result) return;
-  const r = S.result;
   const boy = S.boy, day = S.day;
-  const hasBath = isBathDay(boy, day);
-  const entry = { hasBath, floor: r.floor?.s??0, desk: r.desk?.s??0, trash: r.trash?.s??0 };
-  if (hasBath) { entry.sink = r.sink?.s??0; entry.towels = r.towels?.s??0; entry.counter = r.counter?.s??0; }
   if (!S.scores[boy]) S.scores[boy] = {};
-  S.scores[boy][day] = entry;
+  S.scores[boy][day] = buildEntry(boy, day, S.result);
   if (!S.savedPhotos[boy]) S.savedPhotos[boy] = {};
   const photos = { ...S.thumbs };
   S.savedPhotos[boy][day] = photos;
@@ -1648,9 +1673,8 @@ function weekSparkline(boy, color) {
   const vals = DAYS.map(d => {
     const e = (S.scores[boy] || {})[d];
     if (!e) return null;
-    const rs = roomScore(e), bs = e.hasBath ? bathScore(e) : 0;
-    const max = e.hasBath ? 90 : 60;
-    return Math.round(((rs + bs) / max) * 100);
+    const max = entryMax(e) || 1;
+    return Math.round((entryTotal(e) / max) * 100);
   });
   if (vals.filter(v => v != null).length < 2) return '';
   const W = 120, H = 36, pad = 4;
@@ -1724,6 +1748,98 @@ function renderPage() {
     el.classList.add('page-anim');
     S._lastTab = S.tab;
   }
+}
+
+// ── Rooms configuration card (Setup) ──
+function renderRoomsCard(el) {
+  const card = mkCard('Rooms');
+  const hint = document.createElement('div');
+  hint.className = 'hint';
+  hint.textContent = 'Each room is photographed and graded. Set how many baseline and daily photos it needs, and how many points it’s worth toward the score.';
+  card.appendChild(hint);
+
+  allRooms().forEach(room => {
+    const block = document.createElement('div');
+    block.style.cssText = 'padding:12px 16px;border-top:0.5px solid var(--sep);';
+
+    const top = document.createElement('div');
+    top.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:10px;';
+    const nameInp = document.createElement('input');
+    nameInp.type = 'text'; nameInp.value = room.name;
+    nameInp.style.cssText = 'flex:1;background:transparent;color:var(--text);border:1.5px solid var(--sep);border-radius:10px;padding:8px 12px;font-size:16px;font-weight:600;';
+    nameInp.onchange = () => { room.name = nameInp.value.trim() || 'Room'; saveRooms(); render(); };
+    top.appendChild(nameInp);
+    const del = document.createElement('button');
+    del.className = 'btn btn-ghost btn-sm'; del.style.color = 'var(--err)'; del.textContent = 'Delete';
+    del.onclick = () => {
+      if (!confirm(`Delete the "${room.name}" room? It will no longer be graded.`)) return;
+      S.rooms = S.rooms.filter(r => r.id !== room.id);
+      saveRooms(); render();
+    };
+    top.appendChild(del);
+    block.appendChild(top);
+
+    const num = (label, val, min, on, reRender) => {
+      const wrap = document.createElement('label');
+      wrap.style.cssText = 'display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);flex:1;text-transform:uppercase;letter-spacing:.3px;';
+      const inp = document.createElement('input');
+      inp.type = 'number'; inp.min = String(min); inp.value = val;
+      inp.style.cssText = 'background:transparent;color:var(--text);border:1.5px solid var(--sep);border-radius:8px;padding:7px 8px;font-size:15px;font-weight:600;';
+      inp.onchange = () => {
+        let v = parseInt(inp.value, 10);
+        if (!Number.isFinite(v) || v < min) v = min;
+        inp.value = v; on(v); saveRooms();
+        if (reRender) render();
+      };
+      wrap.appendChild(document.createTextNode(label)); wrap.appendChild(inp);
+      return wrap;
+    };
+    const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:8px;margin-bottom:10px;';
+    row.appendChild(num('Base photos', room.base, 1, v => room.base = v, true));
+    row.appendChild(num('Daily photos', room.daily, 1, v => room.daily = v, true));
+    row.appendChild(num('Points', room.points, 1, v => room.points = v, false));
+    block.appendChild(row);
+
+    const seg = (a, b, isA, onA, onB) => {
+      const w = document.createElement('div');
+      w.style.cssText = 'display:flex;border:1.5px solid var(--sep);border-radius:9px;overflow:hidden;';
+      const mk = (t, act, fn) => {
+        const x = document.createElement('button');
+        x.textContent = t;
+        x.style.cssText = `padding:7px 11px;font-size:12px;font-weight:600;border:none;cursor:pointer;font-family:inherit;${act ? 'background:var(--accent);color:#fff' : 'background:transparent;color:var(--muted)'}`;
+        x.onclick = () => { fn(); saveRooms(); render(); };
+        return x;
+      };
+      w.appendChild(mk(a, isA, onA));
+      w.appendChild(mk(b, !isA, onB));
+      return w;
+    };
+    const togRow = document.createElement('div'); togRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+    togRow.appendChild(seg('Every day', 'Scheduled days', room.everyday, () => room.everyday = true, () => room.everyday = false));
+    togRow.appendChild(seg('Per child', 'Shared', !room.shared, () => room.shared = false, () => room.shared = true));
+    block.appendChild(togRow);
+
+    card.appendChild(block);
+  });
+
+  const addRow = document.createElement('div');
+  addRow.style.cssText = 'display:flex;gap:8px;padding:12px 16px;border-top:0.5px solid var(--sep);';
+  const addInp = document.createElement('input');
+  addInp.type = 'text'; addInp.placeholder = 'New room name (e.g. Playroom)';
+  addInp.style.cssText = 'flex:1;background:transparent;color:var(--text);border:1.5px solid var(--sep);border-radius:10px;padding:9px 12px;font-size:15px;';
+  const addBtn = document.createElement('button');
+  addBtn.className = 'btn btn-primary'; addBtn.style.cssText = 'flex-shrink:0;padding:9px 16px;font-size:15px;border-radius:10px;';
+  addBtn.textContent = '+ Add';
+  addBtn.onclick = () => {
+    const name = (addInp.value || '').trim();
+    if (!name) { showMsg('Enter a room name', 'warn'); return; }
+    S.rooms.push({ id: genRoomId(), name, base: 3, daily: 2, points: 30, everyday: true, shared: false });
+    saveRooms(); render();
+  };
+  addRow.appendChild(addInp); addRow.appendChild(addBtn);
+  card.appendChild(addRow);
+
+  el.appendChild(card);
 }
 
 // ── Setup tab ──
@@ -1857,7 +1973,7 @@ function renderSetup(el) {
       // ── Bathroom days label ──
       const bathDaysLbl = document.createElement('div');
       bathDaysLbl.style.cssText = 'font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;margin-top:2px;';
-      bathDaysLbl.innerHTML = `<span style="color:var(--info)">${ICON.droplet}</span> Bathroom days`;
+      bathDaysLbl.innerHTML = `<span style="color:var(--info)">${ICON.droplet}</span> Scheduled days`;
       row.appendChild(bathDaysLbl);
 
       // ── Day pills: tap to toggle bath day ──
@@ -1933,7 +2049,7 @@ function renderSetup(el) {
 
   const bathLbl = document.createElement('div');
   bathLbl.style.cssText = 'font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;';
-  bathLbl.innerHTML = `<span style="color:var(--info)">${ICON.droplet}</span> Bathroom days`;
+  bathLbl.innerHTML = `<span style="color:var(--info)">${ICON.droplet}</span> Scheduled days`;
 
   // Use the same .day-row / .day-pill classes as the Grade tab's day selector
   const bathRow = document.createElement('div');
@@ -1961,24 +2077,31 @@ function renderSetup(el) {
   childCard.appendChild(addForm);
   el.appendChild(childCard);
 
-  // Baseline photo sections — one card per child + shared bathroom
-  function makeBaseCard(title, slots, prefix) {
+  // ── Rooms configuration ──
+  renderRoomsCard(el);
+
+  // Baseline photo sections — one card per room (shared rooms once; per-child
+  // rooms once per child), each with that room's number of baseline slots.
+  function roomBaseCard(room, boy) {
+    const title = room.shared ? `${room.name} Baselines (shared)` : `${boy}'s ${room.name} Baselines`;
     const card = mkCard(title);
     const grid = document.createElement('div');
     grid.className = 'slot-grid';
-    slots.forEach(sl => {
-      const key = `${prefix}|${sl.id}`;
-      grid.appendChild(makeSlot(`base-${key}`, sl.label, S.baselines[key]||null,
+    for (let i = 0; i < room.base; i++) {
+      const key = baseKey(room, boy, i);
+      grid.appendChild(makeSlot(`base-${key}`, slotLabel(room, i, room.base), S.baselines[key] || null,
         b64 => { S.baselines[key] = b64; _putBaseline(key, b64); }, true));
-    });
+    }
     card.appendChild(grid);
     return card;
   }
-
-  S.children.forEach(child => {
-    el.appendChild(makeBaseCard(`${child.name}'s Bedroom Baselines`, BASE_ROOM, child.name));
+  allRooms().forEach(room => {
+    if (room.shared) {
+      el.appendChild(roomBaseCard(room, null));
+    } else {
+      S.children.forEach(child => el.appendChild(roomBaseCard(room, child.name)));
+    }
   });
-  el.appendChild(makeBaseCard('Shared Bathroom Baselines', BASE_BATH, 'shared'));
 
   // Backup / Restore
   const bCard = mkCard('Backup & Restore');
@@ -2217,60 +2340,78 @@ function renderSetup(el) {
 }
 
 // ── Saved score view ──
+// Human label for a stored photo slot id (v2 `roomId|i` or legacy slot id).
+function _slotLabelFromId(id) {
+  const parts = id.split('|');
+  if (parts.length === 2) {
+    const room = allRooms().find(r => r.id === parts[0]);
+    const i = parseInt(parts[1], 10) || 0;
+    return room ? slotLabel(room, i, room.daily) : `${parts[0]} ${i + 1}`;
+  }
+  const legacy = [...DAILY_ROOM, ...DAILY_BATH].find(s => s.id === id);
+  return legacy ? legacy.label : id;
+}
+// Grid of score cards from rows [{label, s, max, n}].
+function _scoreCards(rows) {
+  const grid = document.createElement('div'); grid.className = 'score-grid';
+  rows.forEach(c => {
+    const item = document.createElement('div'); item.className = 'score-item';
+    item.innerHTML = `<div class="score-cat">${c.label}</div>
+      <div class="score-num" style="color:${scoreColor(c.s, c.max)}">${c.s}<span class="score-max"> /${c.max}</span></div>
+      ${c.n ? `<div class="score-note">${c.n}</div>` : ''}`;
+    grid.appendChild(item);
+  });
+  return grid;
+}
+// Score rows for a saved entry — per-room (v2) or legacy categories.
+function entryRows(entry) {
+  if (entry && entry.scores) {
+    return Object.keys(entry.scores).map(k => {
+      const sc = entry.scores[k];
+      return { label: sc.name || (allRooms().find(r => r.id === k) || {}).name || k,
+               s: sc.s || 0, max: sc.max || 0, n: sc.n || '' };
+    });
+  }
+  const cats = [...ROOM_CATS, ...(entry && entry.hasBath ? BATH_CATS : [])];
+  return cats.map(c => ({ label: c.label, s: entry[c.key] ?? 0, max: c.max, n: '' }));
+}
+
 function renderSavedScore(el, entry) {
   const boy = S.boy, day = S.day;
-  const hasBath = !!entry.hasBath;
-  const cats = [...ROOM_CATS, ...(hasBath ? BATH_CATS : [])];
-
   const sec = mkCard(`Saved Score — ${boy} / ${day}`);
 
   // Photos for this day are fetched on demand the first time it's viewed.
   if (!S.savedPhotos[boy] || S.savedPhotos[boy][day] === undefined) {
-    ensurePhotosLoaded(boy, day);   // sets the day, then re-renders with photos
+    ensurePhotosLoaded(boy, day);
   }
   const dayPhotos = S.savedPhotos[boy]?.[day] || {};
-  if (Object.keys(dayPhotos).length > 0) {
-    const needSlots = [...DAILY_ROOM, ...(hasBath ? DAILY_BATH : [])];
-    const available = needSlots.filter(sl => dayPhotos[sl.id]);
-    if (available.length > 0) {
-      const pLbl = document.createElement('div');
-      pLbl.className = 'lbl'; pLbl.textContent = 'Photos from this day';
-      sec.appendChild(pLbl);
-
-      const pGrid = document.createElement('div'); pGrid.className = 'slot-grid';
-      available.forEach(sl => {
-        const wrap = document.createElement('div');
-        wrap.className = 'slot'; wrap.style.cursor = 'default';
-        const img = document.createElement('img'); img.src = dayPhotos[sl.id];
-        wrap.appendChild(img);
-        const lbl = document.createElement('div');
-        lbl.className = 'slot-label'; lbl.textContent = sl.label;
-        wrap.appendChild(lbl);
-        pGrid.appendChild(wrap);
-      });
-      sec.appendChild(pGrid);
-
-      const divider = document.createElement('div'); divider.className = 'div';
-      sec.appendChild(divider);
-    }
+  const photoIds = Object.keys(dayPhotos).filter(id => dayPhotos[id]);
+  if (photoIds.length) {
+    const pLbl = document.createElement('div');
+    pLbl.className = 'lbl'; pLbl.textContent = 'Photos from this day';
+    sec.appendChild(pLbl);
+    const pGrid = document.createElement('div'); pGrid.className = 'slot-grid';
+    photoIds.forEach(id => {
+      const wrap = document.createElement('div');
+      wrap.className = 'slot'; wrap.style.cursor = 'default';
+      const img = document.createElement('img'); img.src = dayPhotos[id];
+      wrap.appendChild(img);
+      const lbl = document.createElement('div');
+      lbl.className = 'slot-label'; lbl.textContent = _slotLabelFromId(id);
+      wrap.appendChild(lbl);
+      pGrid.appendChild(wrap);
+    });
+    sec.appendChild(pGrid);
+    const divider = document.createElement('div'); divider.className = 'div';
+    sec.appendChild(divider);
   }
 
-  const rTot = cats.reduce((s,c) => s + (entry[c.key] ?? 0), 0);
-  const maxPts = hasBath ? 90 : 60;
   const totDiv = document.createElement('div'); totDiv.className = 'score-total';
   totDiv.innerHTML = `<div class="score-total-label">Day Total</div>
-    <div style="display:flex;justify-content:center;margin-top:6px">${scoreRing(rTot, maxPts)}</div>`;
+    <div style="display:flex;justify-content:center;margin-top:6px">${scoreRing(entryTotal(entry), entryMax(entry))}</div>`;
   sec.appendChild(totDiv);
 
-  const grid = document.createElement('div'); grid.className = 'score-grid';
-  cats.forEach(cat => {
-    const s = entry[cat.key] ?? 0;
-    const item = document.createElement('div'); item.className = 'score-item';
-    item.innerHTML = `<div class="score-cat">${cat.label}</div>
-      <div class="score-num" style="color:${scoreColor(s,cat.max)}">${s}<span class="score-max"> /${cat.max}</span></div>`;
-    grid.appendChild(item);
-  });
-  sec.appendChild(grid);
+  sec.appendChild(_scoreCards(entryRows(entry)));
 
   const regradeBtn = document.createElement('button');
   regradeBtn.className = 'btn btn-ghost btn-full';
@@ -2334,55 +2475,45 @@ function renderGrade(el) {
   });
   dayCard.appendChild(dayRow);
 
+  // Day info: which rooms are graded for this child today.
+  function dayInfoEl() {
+    const active = roomsForDay(S.boy, S.day);
+    const div = document.createElement('div');
+    div.style.cssText = 'font-size:13px;color:var(--muted);margin-top:10px';
+    if (!active.length) { div.textContent = 'No rooms set up yet — add one in Setup.'; return div; }
+    const scheduled = allRooms().some(r => !r.everyday) && isScheduledDay(S.boy, S.day);
+    div.innerHTML = (scheduled ? `<span class="badge badge-bath">Scheduled day</span> &nbsp;` : '')
+      + `Grading: ${active.map(r => r.name).join(' + ')}`;
+    return div;
+  }
+
   if ((S.scores[S.boy] || {})[S.day] && !S.regrade && !S.result) {
-    const hasBath2 = isBathDay(S.boy, S.day);
-    const bathInfo2 = document.createElement('div');
-    bathInfo2.style.cssText = 'font-size:13px;color:var(--muted);margin-top:10px';
-    bathInfo2.innerHTML = hasBath2
-      ? `<span class="badge badge-bath">Bathroom Day</span> &nbsp;Bedroom + Bathroom scored`
-      : `Bedroom only`;
-    dayCard.appendChild(bathInfo2);
+    dayCard.appendChild(dayInfoEl());
     el.appendChild(dayCard);
     renderSavedScore(el, S.scores[S.boy][S.day]);
     return;
   }
 
-  const hasBath = isBathDay(S.boy, S.day);
-  const bathInfo = document.createElement('div');
-  bathInfo.style.cssText = 'font-size:13px;color:var(--muted);margin-top:10px';
-  bathInfo.innerHTML = hasBath
-    ? `<span class="badge badge-bath">Bathroom Day</span> &nbsp;Bedroom + Bathroom scored`
-    : `Bedroom only`;
-  dayCard.appendChild(bathInfo);
+  const active = roomsForDay(S.boy, S.day);
+  dayCard.appendChild(dayInfoEl());
   el.appendChild(dayCard);
+  if (!active.length) return;
 
-  // Photo upload
+  // Photo upload — one section per active room
   const photoCard = mkCard(`Today's Photos — ${S.boy} / ${S.day}`);
-
-  const rLbl = document.createElement('div'); rLbl.className = 'lbl'; rLbl.textContent = 'Bedroom';
-  photoCard.appendChild(rLbl);
-  const rGrid = document.createElement('div'); rGrid.className = 'slot-grid';
-  DAILY_ROOM.forEach(sl => {
-    rGrid.appendChild(makeSlot(sl.id, sl.label, S.photos[sl.id]||null,
-      b64 => { S.photos[sl.id] = b64; render(); }, false,
-      thumb => { S.thumbs[sl.id] = thumb; }));
+  active.forEach((room, ri) => {
+    if (ri > 0) { const dv = document.createElement('div'); dv.className = 'div'; photoCard.appendChild(dv); }
+    const lbl = document.createElement('div'); lbl.className = 'lbl'; lbl.textContent = room.name;
+    photoCard.appendChild(lbl);
+    const grid = document.createElement('div'); grid.className = 'slot-grid';
+    for (let i = 0; i < room.daily; i++) {
+      const id = dailySlotId(room, i);
+      grid.appendChild(makeSlot(id, slotLabel(room, i, room.daily), S.photos[id] || null,
+        b64 => { S.photos[id] = b64; render(); }, false,
+        thumb => { S.thumbs[id] = thumb; }));
+    }
+    photoCard.appendChild(grid);
   });
-  photoCard.appendChild(rGrid);
-
-  if (hasBath) {
-    const div = document.createElement('div'); div.className = 'div';
-    photoCard.appendChild(div);
-    const bLbl = document.createElement('div'); bLbl.className = 'lbl'; bLbl.textContent = 'Bathroom';
-    photoCard.appendChild(bLbl);
-    const bGrid = document.createElement('div'); bGrid.className = 'slot-grid';
-    DAILY_BATH.forEach(sl => {
-      bGrid.appendChild(makeSlot(sl.id, sl.label, S.photos[sl.id]||null,
-        b64 => { S.photos[sl.id] = b64; render(); }, false,
-        thumb => { S.thumbs[sl.id] = thumb; }));
-    });
-    photoCard.appendChild(bGrid);
-  }
-
   el.appendChild(photoCard);
 
   // Grade / progress
@@ -2398,13 +2529,14 @@ function renderGrade(el) {
     pCard.appendChild(pLbl);
     el.appendChild(pCard);
   } else {
-    const needSlots = [...DAILY_ROOM, ...(hasBath ? DAILY_BATH : [])];
+    const needSlots = [];
+    active.forEach(r => { for (let i = 0; i < r.daily; i++) needSlots.push({ id: dailySlotId(r, i), label: slotLabel(r, i, r.daily) }); });
 
     const childColor = getChild(S.boy)?.color || 'var(--accent)';
     const gradeBtn = document.createElement('button');
     gradeBtn.className = 'btn btn-full';
     gradeBtn.style.cssText = `margin: 0 16px 8px; width: calc(100% - 32px); background:${childColor}; color:${readableOn(childColor)}; padding:13px 20px; border-radius:14px; font-size:17px; font-weight:600; cursor:pointer; border:none; display:inline-flex; align-items:center; justify-content:center; gap:8px;`;
-    gradeBtn.innerHTML = `${ICON.cameraSmall}<span>Grade ${S.boy}'s Room</span>`;
+    gradeBtn.innerHTML = `${ICON.cameraSmall}<span>Grade ${active.length > 1 ? S.boy + "'s Rooms" : S.boy + "'s " + active[0].name}</span>`;
     gradeBtn.onclick = gradePhotos;
     el.appendChild(gradeBtn);
 
@@ -2441,29 +2573,25 @@ function renderGrade(el) {
 
 function renderResult(el, result) {
   const boy = S.boy, day = S.day;
-  const hasBath = isBathDay(boy, day);
-  const cats = [...ROOM_CATS, ...(hasBath ? BATH_CATS : [])];
-
   const sec = mkCard(`Result — ${boy} / ${day}`);
 
-  const rTot = cats.reduce((s,c) => s + (result[c.key]?.s ?? 0), 0);
-  const maxPts = hasBath ? 90 : 60;
+  // Per-room rows from the AI result, clamped to each room's max.
+  const rows = roomsForDay(boy, day).map(r => {
+    let s = (result[r.id] || {}).s;
+    s = typeof s === 'number' ? s : parseInt(s, 10);
+    if (!Number.isFinite(s)) s = 0;
+    s = Math.max(0, Math.min(r.points, s));
+    return { label: r.name, s, max: r.points, n: (result[r.id] || {}).n || '' };
+  });
+  const rTot = rows.reduce((a, c) => a + c.s, 0);
+  const maxPts = rows.reduce((a, c) => a + c.max, 0);
+
   const totDiv = document.createElement('div'); totDiv.className = 'score-total';
   totDiv.innerHTML = `<div class="score-total-label">Session Total</div>
     <div style="display:flex;justify-content:center;margin-top:6px">${scoreRing(rTot, maxPts)}</div>`;
   sec.appendChild(totDiv);
 
-  const grid = document.createElement('div'); grid.className = 'score-grid';
-  cats.forEach(cat => {
-    const s = result[cat.key]?.s ?? 0;
-    const n = result[cat.key]?.n || '';
-    const item = document.createElement('div'); item.className = 'score-item';
-    item.innerHTML = `<div class="score-cat">${cat.label}</div>
-      <div class="score-num" style="color:${scoreColor(s,cat.max)}">${s}<span class="score-max"> /${cat.max}</span></div>
-      ${n ? `<div class="score-note">${n}</div>` : ''}`;
-    grid.appendChild(item);
-  });
-  sec.appendChild(grid);
+  sec.appendChild(_scoreCards(rows));
 
   const saveBtn = document.createElement('button');
   saveBtn.className = 'btn btn-primary btn-full';
@@ -2599,14 +2727,8 @@ function renderSummary(el) {
         const nameEl = document.createElement('div'); nameEl.className = 'day-row-name'; nameEl.textContent = d;
         row.appendChild(nameEl);
 
-        if (e.hasBath) {
-          const badge = document.createElement('span'); badge.className = 'badge badge-bath'; badge.textContent = 'bath';
-          row.appendChild(badge);
-        }
-
-        const rs = roomScore(e); const bs = e.hasBath ? bathScore(e) : null;
-        const total = rs + (bs || 0);
-        const maxPts = e.hasBath ? 90 : 60;
+        const total = entryTotal(e);
+        const maxPts = entryMax(e) || 1;
         const pct = Math.round((total / maxPts) * 100);
         const barColor = pct >= 85 ? 'var(--ok)' : pct >= 60 ? 'var(--warn)' : 'var(--err)';
 
@@ -2620,9 +2742,7 @@ function renderSummary(el) {
 
         const pts = document.createElement('div'); pts.className = 'day-row-pts';
         pts.style.color = barColor;
-        pts.innerHTML = bs !== null
-          ? `${rs}<span style="color:var(--muted);font-size:11px;font-weight:400"> +${bs}</span>`
-          : `${rs}`;
+        pts.innerHTML = `${total}<span style="color:var(--muted);font-size:11px;font-weight:400"> /${maxPts}</span>`;
         row.appendChild(pts);
 
         const del = document.createElement('button');

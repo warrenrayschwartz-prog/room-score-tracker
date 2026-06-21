@@ -619,7 +619,7 @@ def change_password():
 
 # ── Data routes (per-user, auth required) ───────────────────────────────────────
 def _empty_state():
-    return {'children': [], 'scores': {}, 'difficulty': 3, 'maxAllowance': 50}
+    return {'children': [], 'scores': {}, 'difficulty': 3, 'maxAllowance': 50, 'rooms': []}
 
 
 @app.route('/api/data')
@@ -673,6 +673,7 @@ def put_state():
         'scores': data.get('scores') or {},
         'difficulty': data.get('difficulty', 3),
         'maxAllowance': data.get('maxAllowance', 50),
+        'rooms': data.get('rooms') or [],
     }
     st = sess.get(AppState, owner)
     if st is None:
@@ -775,6 +776,7 @@ def migrate():
             'scores': state.get('scores') or {},
             'difficulty': state.get('difficulty', 3),
             'maxAllowance': state.get('maxAllowance', 50),
+            'rooms': state.get('rooms') or [],
         }))
     for key, val in (data.get('baselines') or {}).items():
         if isinstance(val, str) and val:
