@@ -1281,12 +1281,12 @@ function renderAuthScreen() {
     card.appendChild(or);
 
     if (AUTH.google) {
-      const gBtn = document.createElement('button');
-      gBtn.className = 'btn btn-full';
-      gBtn.style.cssText = 'background:#fff;color:#3c4043;border:1.5px solid var(--sep);margin-bottom:8px;';
-      gBtn.textContent = 'Continue with Google';
-      gBtn.onclick = () => startGoogleSignIn();
-      card.appendChild(gBtn);
+      // Google's official button is rendered into this container after the
+      // card is in the DOM (see the renderGoogleButton call below).
+      const gWrap = document.createElement('div');
+      gWrap.id = 'gsi-button';
+      gWrap.style.cssText = 'display:flex;justify-content:center;margin-bottom:8px;min-height:40px;';
+      card.appendChild(gWrap);
     }
     if (AUTH.apple) {
       const aBtn = document.createElement('button');
@@ -1311,25 +1311,41 @@ function renderAuthScreen() {
   card.appendChild(toggle);
 
   el.appendChild(card);
+
+  // Render Google's official button now that the container is in the DOM.
+  if (AUTH.google && (mode === 'login' || mode === 'signup')) renderGoogleButton(0);
 }
 
-// Social sign-in stubs — wired to Google Identity Services / Apple JS when
-// those providers are configured on the server (GOOGLE_CLIENT_ID / APPLE_CLIENT_ID).
-function startGoogleSignIn() {
+// Social sign-in — Google Identity Services (rendered button) / Apple JS,
+// active only when configured on the server (GOOGLE_CLIENT_ID / APPLE_CLIENT_ID).
+let _gsiInited = false;
+function _googleHandleCredential(resp) {
+  (async () => {
+    try {
+      const r = await API.req('POST', '/api/auth/google', { credential: resp.credential });
+      await onAuthSuccess(r, true);
+    } catch(e) { showMsg(e.message || 'Google sign-in failed', 'err'); }
+  })();
+}
+function renderGoogleButton(attempt) {
+  const container = document.getElementById('gsi-button');
+  if (!container) return;
+  // The GIS library loads async; retry briefly until it's ready.
   if (!(window.google && google.accounts && google.accounts.id)) {
-    showMsg('Google sign-in is still loading — try again in a moment.', 'warn');
+    if ((attempt || 0) < 25) setTimeout(() => renderGoogleButton((attempt || 0) + 1), 200);
     return;
   }
-  google.accounts.id.initialize({
-    client_id: AUTH.googleClientId,
-    callback: async (resp) => {
-      try {
-        const r = await API.req('POST', '/api/auth/google', { credential: resp.credential });
-        await onAuthSuccess(r, true);
-      } catch(e) { showMsg(e.message || 'Google sign-in failed', 'err'); }
-    },
+  if (!_gsiInited) {
+    google.accounts.id.initialize({
+      client_id: AUTH.googleClientId,
+      callback: _googleHandleCredential,
+    });
+    _gsiInited = true;
+  }
+  container.innerHTML = '';
+  google.accounts.id.renderButton(container, {
+    theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', width: 320,
   });
-  google.accounts.id.prompt();
 }
 function startAppleSignIn() {
   if (!(window.AppleID && AppleID.auth)) {
