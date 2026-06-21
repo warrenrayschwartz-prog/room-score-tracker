@@ -157,6 +157,23 @@
     .splash-text { font-size:14px; color:var(--muted); letter-spacing:.2px; }
     @keyframes rscPulse { 0%,100% { opacity:.5; transform:scale(.95); } 50% { opacity:1; transform:scale(1); } }
 
+    /* ── Page transition (on tab change) ── */
+    @keyframes pageIn { from { opacity:0; transform:translateY(7px); } to { opacity:1; transform:none; } }
+    .page-anim { animation: pageIn 0.22s cubic-bezier(.22,.61,.36,1); }
+
+    /* ── Keyboard focus rings (visible only for keyboard users) ── */
+    button:focus-visible, input:focus-visible, a:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    button:focus:not(:focus-visible) { outline: none; }
+
+    /* ── Respect reduced-motion preference ── */
+    @media (prefers-reduced-motion: reduce) {
+      .splash-mark, .page-anim { animation: none !important; }
+      * { transition-duration: 0.01ms !important; }
+    }
+
     /* ── Cards ── */
     .card {
       background: var(--surf);
@@ -1513,6 +1530,22 @@ function scoreRing(earned, max) {
   </svg>`;
 }
 
+// Friendly empty state (no children yet) with the brand mark + a CTA.
+function renderNoChildren(el) {
+  const card = mkCard('');
+  card.style.textAlign = 'center';
+  card.style.padding = '32px 22px';
+  card.innerHTML = `<div style="display:flex;justify-content:center;margin-bottom:14px;opacity:.92">${BRAND_MARK}</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:6px">No children yet</div>
+    <div style="font-size:14px;color:var(--muted);line-height:1.5;margin-bottom:18px">Add your children in Setup to start grading rooms and tracking allowance.</div>`;
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-primary';
+  btn.textContent = 'Go to Setup';
+  btn.onclick = () => { S.tab = 'setup'; S.msg = ''; render(); };
+  card.appendChild(btn);
+  el.appendChild(card);
+}
+
 function renderTabs() {
   const el = document.getElementById('tabs');
   el.innerHTML = '';
@@ -1545,6 +1578,15 @@ function renderPage() {
   if (S.tab === 'setup')   renderSetup(el);
   else if (S.tab === 'grade') renderGrade(el);
   else                     renderSummary(el);
+
+  // Gentle fade-in only when the tab actually changes (not on every
+  // re-render, e.g. a transient message), so it feels intentional.
+  if (S._lastTab !== S.tab) {
+    el.classList.remove('page-anim');
+    void el.offsetWidth;            // force reflow so the animation restarts
+    el.classList.add('page-anim');
+    S._lastTab = S.tab;
+  }
 }
 
 // ── Setup tab ──
@@ -1987,12 +2029,7 @@ function renderGrade(el) {
   if (!getChild(S.boy) && S.children.length > 0) S.boy = S.children[0].name;
 
   if (S.children.length === 0) {
-    const empty = mkCard('No Children Added');
-    const hint = document.createElement('div');
-    hint.className = 'hint';
-    hint.textContent = 'Go to Setup to add your children first.';
-    empty.appendChild(hint);
-    el.appendChild(empty);
+    renderNoChildren(el);
     return;
   }
 
@@ -2091,7 +2128,7 @@ function renderGrade(el) {
 
   // Grade / progress
   if (S.grading) {
-    const pCard = mkCard('Sending to Claude Opus 4.7…');
+    const pCard = mkCard('Analyzing the room…');
     const prog = document.createElement('div'); prog.className = 'prog-wrap';
     const fill = document.createElement('div'); fill.className = 'prog-fill';
     fill.style.width = S.gradePct + '%';
@@ -2189,12 +2226,7 @@ function renderResult(el, result) {
 // ── Summary tab ──
 function renderSummary(el) {
   if (S.children.length === 0) {
-    const empty = mkCard('No Children Added');
-    const hint = document.createElement('div');
-    hint.className = 'hint';
-    hint.textContent = 'Go to Setup to add your children first.';
-    empty.appendChild(hint);
-    el.appendChild(empty);
+    renderNoChildren(el);
     return;
   }
 
