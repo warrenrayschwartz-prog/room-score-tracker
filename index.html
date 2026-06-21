@@ -1387,18 +1387,27 @@ function restoreBaselines() {
 }
 
 // ─── Rendering ───────────────────────────────────────────────────────────────
+let _rendering = false;
 function render() {
-  const tabsEl = document.getElementById('tabs');
-  if (!S.authed) {
-    if (tabsEl) tabsEl.style.display = 'none';
+  // Guard against re-entrant renders (e.g. an async helper calling render()
+  // mid-build) which would append duplicate cards to a half-built page.
+  if (_rendering) return;
+  _rendering = true;
+  try {
+    const tabsEl = document.getElementById('tabs');
+    if (!S.authed) {
+      if (tabsEl) tabsEl.style.display = 'none';
+      renderHeaderActions();
+      renderAuthScreen();
+      return;
+    }
+    if (tabsEl) tabsEl.style.display = '';
     renderHeaderActions();
-    renderAuthScreen();
-    return;
+    renderTabs();
+    renderPage();
+  } finally {
+    _rendering = false;
   }
-  if (tabsEl) tabsEl.style.display = '';
-  renderHeaderActions();
-  renderTabs();
-  renderPage();
 }
 
 // Show a "Sign out" button in the header only when signed in.
@@ -2193,7 +2202,9 @@ function renderSetup(el) {
     const remCard = mkCard('Daily Reminder');
     const rBody = document.createElement('div');
     rBody.style.cssText = 'padding:4px 16px 14px;display:flex;flex-direction:column;gap:10px;';
-    if (!S.pushChecked) refreshPushState();   // async; re-renders when known
+    // Defer so it never re-enters render() during this render pass (which
+    // would duplicate the cards below). It re-renders once the state is known.
+    if (!S.pushChecked) setTimeout(refreshPushState, 0);
 
     const rText = document.createElement('div');
     rText.className = 'hint'; rText.style.padding = '0';
@@ -2311,14 +2322,17 @@ function renderSetup(el) {
   el.appendChild(shareCard);
 
   // ── Account ──
-  const acctCard = mkCard('Account');
-  if (S.account && S.account.email) {
-    const who = document.createElement('div');
-    who.className = 'hint';
-    who.style.cssText = 'padding:4px 16px 10px;';
-    who.textContent = 'Signed in as ' + S.account.email;
-    acctCard.appendChild(who);
-  }
+  const acctCard = mkCard('Your Account');
+  const who = document.createElement('div');
+  who.className = 'hint';
+  who.style.cssText = 'padding:4px 16px 10px;';
+  const acct = S.account || {};
+  const signedInAs = acct.email ? `Signed in as ${acct.email}`
+    : acct.google ? 'Signed in with Google'
+    : acct.apple ? 'Signed in with Apple'
+    : 'Signed in';
+  who.innerHTML = `${signedInAs}. <br><span style="color:var(--muted)">Manage your login here — sign out, set or change your password, or delete your account and data.</span>`;
+  acctCard.appendChild(who);
   const acctRow = document.createElement('div');
   acctRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;padding:0 16px 12px;';
 
