@@ -289,6 +289,35 @@ def index():
     return no_cache(make_response(send_from_directory(str(HERE), 'index.html')))
 
 
+# ── Home-screen / PWA assets ────────────────────────────────────────────────────
+@app.route('/manifest.webmanifest')
+def manifest():
+    return send_from_directory(str(HERE), 'manifest.webmanifest',
+                               mimetype='application/manifest+json')
+
+
+@app.route('/icon-180.png')
+def icon_180():
+    return send_from_directory(str(HERE), 'icon-180.png', mimetype='image/png')
+
+
+@app.route('/icon-192.png')
+def icon_192():
+    return send_from_directory(str(HERE), 'icon-192.png', mimetype='image/png')
+
+
+@app.route('/icon-512.png')
+def icon_512():
+    return send_from_directory(str(HERE), 'icon-512.png', mimetype='image/png')
+
+
+@app.route('/apple-touch-icon.png')
+@app.route('/apple-touch-icon-precomposed.png')
+def apple_touch_icon():
+    # iOS probes these default paths even with an explicit <link>.
+    return send_from_directory(str(HERE), 'icon-180.png', mimetype='image/png')
+
+
 # ── Auth routes ────────────────────────────────────────────────────────────────
 @app.route('/api/auth/config')
 def auth_config():
