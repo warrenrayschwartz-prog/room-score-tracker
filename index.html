@@ -499,7 +499,7 @@
 'use strict';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
-const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat'];
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
 // Color palette for children — first two match original Wesley/Walker colors
 const CHILD_COLORS = ['#5856D6','#FF2D55','#FF9500','#34C759','#007AFF','#AF52DE','#FF3B30','#32ADE6'];
@@ -617,7 +617,7 @@ const DIFFICULTY = [
 ];
 
 function todayDay() {
-  const map = {1:'Mon',2:'Tue',3:'Wed',4:'Thu',5:'Fri',6:'Sat'};
+  const map = {0:'Sun',1:'Mon',2:'Tue',3:'Wed',4:'Thu',5:'Fri',6:'Sat'};
   return map[new Date().getDay()] || 'Mon';
 }
 
