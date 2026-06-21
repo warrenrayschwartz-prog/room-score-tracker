@@ -151,6 +151,12 @@
     /* ── Content ── */
     .page { padding: 8px 0 16px; max-width: 680px; margin: 0 auto; }
 
+    /* ── Loading splash ── */
+    .splash { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:62vh; gap:14px; }
+    .splash-mark { animation: rscPulse 1.15s ease-in-out infinite; }
+    .splash-text { font-size:14px; color:var(--muted); letter-spacing:.2px; }
+    @keyframes rscPulse { 0%,100% { opacity:.5; transform:scale(.95); } 50% { opacity:1; transform:scale(1); } }
+
     /* ── Cards ── */
     .card {
       background: var(--surf);
@@ -1485,6 +1491,26 @@ function signalBars(level) {
   return `<svg viewBox="0 0 24 24" width="22" height="22">${bars}</svg>`;
 }
 
+// App mark (matches the home-screen icon) — used in the loading splash.
+const BRAND_MARK = `<svg width="74" height="74" viewBox="0 0 76 76" aria-hidden="true"><defs><linearGradient id="bm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#007AFF"/><stop offset="1" stop-color="#5856D6"/></linearGradient></defs><rect width="76" height="76" rx="18" fill="url(#bm)"/><path d="M22 40 l10 11 l22 -26" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+// Circular score ring with the earned/max centered — a polished day-total display.
+function scoreRing(earned, max) {
+  const pct = max ? Math.min(earned / max, 1) : 0;
+  const r = 52, circ = 2 * Math.PI * r, off = circ * (1 - pct);
+  const col = pct >= 0.85 ? 'var(--ok-fill)' : pct >= 0.6 ? 'var(--warn)' : 'var(--err-fill)';
+  return `<svg width="132" height="132" viewBox="0 0 120 120" style="display:block">
+    <circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--tint)" stroke-width="9"/>
+    <circle cx="60" cy="60" r="${r}" fill="none" stroke="${col}" stroke-width="9" stroke-linecap="round"
+            stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"
+            transform="rotate(-90 60 60)"/>
+    <text x="60" y="58" text-anchor="middle" font-size="34" font-weight="700"
+          fill="var(--text)" font-family="-apple-system,sans-serif" letter-spacing="-1">${earned}</text>
+    <text x="60" y="78" text-anchor="middle" font-size="14" fill="var(--muted)"
+          font-family="-apple-system,sans-serif">of ${max}</text>
+  </svg>`;
+}
+
 function renderTabs() {
   const el = document.getElementById('tabs');
   el.innerHTML = '';
@@ -1878,7 +1904,7 @@ function renderSavedScore(el, entry) {
   const maxPts = hasBath ? 90 : 60;
   const totDiv = document.createElement('div'); totDiv.className = 'score-total';
   totDiv.innerHTML = `<div class="score-total-label">Day Total</div>
-    <div class="score-total-num">${rTot}<span class="score-total-denom"> / ${maxPts}</span></div>`;
+    <div style="display:flex;justify-content:center;margin-top:6px">${scoreRing(rTot, maxPts)}</div>`;
   sec.appendChild(totDiv);
 
   const grid = document.createElement('div'); grid.className = 'score-grid';
@@ -2032,13 +2058,29 @@ function renderGrade(el) {
     gradeBtn.onclick = gradePhotos;
     el.appendChild(gradeBtn);
 
+    const needCount = needSlots.length;
+    const haveCount = needSlots.filter(sl => !!S.photos[sl.id]).length;
     const checkRow = document.createElement('div');
-    checkRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px';
+    checkRow.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin:0 16px 16px';
+    const tally = document.createElement('span');
+    tally.style.cssText = 'font-size:12px;color:var(--muted);font-weight:600;margin-right:2px';
+    tally.textContent = `${haveCount}/${needCount} photos`;
+    checkRow.appendChild(tally);
     needSlots.forEach(sl => {
       const have = !!S.photos[sl.id];
       const chip = document.createElement('span');
-      chip.style.cssText = `font-size:11px;padding:3px 8px;border-radius:4px;border:1px solid ${have ? 'rgba(74,222,128,.3)' : 'rgba(248,113,113,.3)'};color:${have ? 'var(--ok)' : 'var(--err)'};background:${have ? 'rgba(74,222,128,.08)' : 'rgba(248,113,113,.08)'}`;
-      chip.textContent = (have ? '✓ ' : '✗ ') + sl.label;
+      // Present = green check; missing = neutral gray dot (no harsh red).
+      chip.style.cssText = `display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:4px 9px;border-radius:20px;`
+        + (have
+            ? `border:1px solid rgba(52,199,89,.35);color:var(--ok);background:rgba(52,199,89,.10);`
+            : `border:1px solid var(--sep);color:var(--muted);background:transparent;`);
+      const mark = document.createElement('span');
+      mark.style.cssText = have
+        ? 'color:var(--ok-fill);font-weight:700'
+        : 'width:7px;height:7px;border-radius:50%;border:1.5px solid var(--muted);display:inline-block';
+      if (have) mark.textContent = '✓';
+      chip.appendChild(mark);
+      chip.appendChild(document.createTextNode(sl.label));
       checkRow.appendChild(chip);
     });
     el.appendChild(checkRow);
@@ -2058,7 +2100,7 @@ function renderResult(el, result) {
   const maxPts = hasBath ? 90 : 60;
   const totDiv = document.createElement('div'); totDiv.className = 'score-total';
   totDiv.innerHTML = `<div class="score-total-label">Session Total</div>
-    <div class="score-total-num">${rTot}<span class="score-total-denom"> / ${maxPts}</span></div>`;
+    <div style="display:flex;justify-content:center;margin-top:6px">${scoreRing(rTot, maxPts)}</div>`;
   sec.appendChild(totDiv);
 
   const grid = document.createElement('div'); grid.className = 'score-grid';
@@ -2330,9 +2372,19 @@ function mkCard(title) {
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
+function renderSplash() {
+  const tabsEl = document.getElementById('tabs');
+  if (tabsEl) tabsEl.style.display = 'none';
+  const el = document.getElementById('page');
+  el.innerHTML = `<div class="splash"><div class="splash-mark">${BRAND_MARK}</div><div class="splash-text">Loading…</div></div>`;
+}
+
 async function init() {
   S.authed = false;
   API.token = localStorage.getItem('rsc_token') || '';
+
+  // Branded splash while we check the session / load data (no blank flash).
+  if (API.token) renderSplash();
 
   // Find out which social sign-in buttons to show.
   await loadAuthConfig();
