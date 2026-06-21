@@ -26,7 +26,7 @@
       --surf:    #FFFFFF;
       --surf2:   #F2F2F7;
       --sep:     rgba(60,60,67,0.18);
-      --accent:  #007AFF;
+      --accent:  #5856D6;   /* brand indigo (matches the app icon) */
       --text:    #000000;
       --text2:   #3C3C43;
       --muted:   #6E6E73;   /* darkened from #8E8E93 to meet WCAG AA on white */
@@ -48,7 +48,7 @@
         --surf:    #1C1C1E;
         --surf2:   #2C2C2E;
         --sep:     rgba(84,84,88,0.55);
-        --accent:  #0A84FF;
+        --accent:  #5E5CE6;   /* brand indigo, tuned for dark backgrounds */
         --text:    #FFFFFF;
         --text2:   #EBEBF5;
         --muted:   #9E9EA6;
@@ -267,7 +267,7 @@
       transition: all .15s;
       box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }
-    .day-pill.on   { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(0,122,255,0.35); }
+    .day-pill.on   { background: var(--accent); color: #fff; box-shadow: 0 2px 8px rgba(88,86,214,0.38); }
     .day-pill.done::after {
       content: '';
       position: absolute;
@@ -386,7 +386,7 @@
 
     /* ── Badges ── */
     .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; }
-    .badge-bath { background: rgba(0,122,255,0.1); color: var(--accent); }
+    .badge-bath { background: rgba(88,86,214,0.12); color: var(--accent); }
 
     /* ── Divider ── */
     .div { height: 0.5px; background: var(--sep); margin: 0 16px; }
@@ -424,7 +424,7 @@
       transition: all .15s;
       color: var(--muted);
     }
-    .diff-btn.on { border-color: var(--accent); background: rgba(0,122,255,0.08); color: var(--accent); }
+    .diff-btn.on { border-color: var(--accent); background: rgba(88,86,214,0.10); color: var(--accent); }
     .diff-btn span:first-child { font-size: 20px; }
 
     /* ── Children management ── */
@@ -903,7 +903,7 @@ function makeSlot(uid, label, initB64, onDone, isBaseline, onThumb) {
 
   const plus = document.createElement('div');
   plus.className = 'slot-plus';
-  plus.textContent = '+';
+  plus.innerHTML = ICON.camera;
 
   const lbl = document.createElement('div');
   lbl.className = 'slot-label';
@@ -1480,6 +1480,8 @@ const ICON = {
   chart: `<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>`,
   cloudOff: `<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M18.7 18.7A5 5 0 0 0 18 9h-1.3A7 7 0 0 0 6 5.3"/><path d="M5.5 8.5A5 5 0 0 0 6 18h10"/></svg>`,
   wave: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px"><path d="M18 11V6a1.5 1.5 0 0 0-3 0M15 6.5V4.5a1.5 1.5 0 0 0-3 0v2M12 6.5a1.5 1.5 0 0 0-3 0V12"/><path d="M9 9.5a1.5 1.5 0 0 0-3 0v3.5c0 3.6 2.4 6.5 6 6.5s6-2.6 6-6V9a1.5 1.5 0 0 0-3 0v2"/></svg>`,
+  camera: `<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
+  cameraSmall: `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
 };
 // Signal-strength bars (1–5) — the difficulty indicator, replacing emoji faces.
 function signalBars(level) {
@@ -1551,7 +1553,7 @@ function renderSetup(el) {
   if (S.children.length === 0) {
     const welcomeCard = document.createElement('div');
     welcomeCard.className = 'card';
-    welcomeCard.style.cssText = 'margin:16px 16px 10px;padding:20px 16px 18px;background:linear-gradient(135deg,rgba(0,122,255,0.08),rgba(88,86,214,0.08));border:1px solid rgba(0,122,255,0.18);';
+    welcomeCard.style.cssText = 'margin:16px 16px 10px;padding:20px 16px 18px;background:linear-gradient(135deg,rgba(88,86,214,0.10),rgba(124,92,255,0.07));border:1px solid rgba(88,86,214,0.20);';
 
     const welcomeTitle = document.createElement('div');
     welcomeTitle.style.cssText = 'font-size:20px;font-weight:700;letter-spacing:-0.4px;margin-bottom:14px;display:flex;align-items:center;gap:8px;color:var(--accent);';
@@ -1835,6 +1837,12 @@ function renderSetup(el) {
   signOutBtn.onclick = () => { autoSave(); logout(); };
   acctRow.appendChild(signOutBtn);
 
+  const pwToggle = document.createElement('button');
+  pwToggle.className = 'btn btn-ghost';
+  pwToggle.textContent = (S.account && S.account.hasPassword) ? 'Change password' : 'Set a password';
+  pwToggle.onclick = () => { S.showPwForm = !S.showPwForm; render(); };
+  acctRow.appendChild(pwToggle);
+
   const delBtn = document.createElement('button');
   delBtn.style.cssText = 'border:1.5px solid var(--err);color:var(--err);background:transparent;padding:13px 20px;font-size:17px;font-weight:600;border-radius:14px;cursor:pointer;font-family:inherit;';
   delBtn.textContent = 'Delete account';
@@ -1853,6 +1861,52 @@ function renderSetup(el) {
   };
   acctRow.appendChild(delBtn);
   acctCard.appendChild(acctRow);
+
+  // Inline change-password form (toggled by the button above)
+  if (S.showPwForm) {
+    const hasPw = !!(S.account && S.account.hasPassword);
+    const form = document.createElement('div');
+    form.style.cssText = 'padding:4px 16px 14px;display:flex;flex-direction:column;gap:10px;';
+    const fcss = 'width:100%;background:transparent;color:var(--text);border:1.5px solid var(--sep);border-radius:10px;padding:11px 14px;font-size:16px;';
+
+    let curInp = null;
+    if (hasPw) {
+      curInp = document.createElement('input');
+      curInp.type = 'password'; curInp.placeholder = 'Current password';
+      curInp.autocomplete = 'current-password'; curInp.style.cssText = fcss;
+      form.appendChild(curInp);
+    }
+    const n1 = document.createElement('input');
+    n1.type = 'password'; n1.placeholder = 'New password (8+ characters)';
+    n1.autocomplete = 'new-password'; n1.style.cssText = fcss;
+    const n2 = document.createElement('input');
+    n2.type = 'password'; n2.placeholder = 'Confirm new password';
+    n2.autocomplete = 'new-password'; n2.style.cssText = fcss;
+    form.appendChild(n1); form.appendChild(n2);
+
+    const save = document.createElement('button');
+    save.className = 'btn btn-primary'; save.textContent = hasPw ? 'Update password' : 'Set password';
+    save.onclick = async () => {
+      if (n1.value.length < 8) { showMsg('New password must be at least 8 characters', 'warn'); return; }
+      if (n1.value !== n2.value) { showMsg("Passwords don't match", 'warn'); return; }
+      save.disabled = true; save.textContent = 'Saving…';
+      try {
+        const body = { newPassword: n1.value };
+        if (hasPw) body.currentPassword = curInp.value;
+        const r = await API.req('POST', '/api/auth/change-password', body);
+        API.token = r.token; localStorage.setItem('rsc_token', r.token);
+        S.account = r.account || S.account;
+        S.showPwForm = false;
+        render();
+        showMsg('Password updated.', 'ok');
+      } catch(e) {
+        save.disabled = false; save.textContent = hasPw ? 'Update password' : 'Set password';
+        showMsg(e.message || 'Could not change password', 'err');
+      }
+    };
+    form.appendChild(save);
+    acctCard.appendChild(form);
+  }
 
   const acctHint = document.createElement('div');
   acctHint.className = 'hint';
@@ -2053,8 +2107,8 @@ function renderGrade(el) {
     const childColor = getChild(S.boy)?.color || 'var(--accent)';
     const gradeBtn = document.createElement('button');
     gradeBtn.className = 'btn btn-full';
-    gradeBtn.style.cssText = `margin: 0 16px 8px; width: calc(100% - 32px); background:${childColor}; color:${readableOn(childColor)}; padding:13px 20px; border-radius:14px; font-size:17px; font-weight:600; cursor:pointer; border:none;`;
-    gradeBtn.textContent = `Grade ${S.boy}'s Room`;
+    gradeBtn.style.cssText = `margin: 0 16px 8px; width: calc(100% - 32px); background:${childColor}; color:${readableOn(childColor)}; padding:13px 20px; border-radius:14px; font-size:17px; font-weight:600; cursor:pointer; border:none; display:inline-flex; align-items:center; justify-content:center; gap:8px;`;
+    gradeBtn.innerHTML = `${ICON.cameraSmall}<span>Grade ${S.boy}'s Room</span>`;
     gradeBtn.onclick = gradePhotos;
     el.appendChild(gradeBtn);
 

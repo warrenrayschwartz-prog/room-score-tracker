@@ -513,6 +513,36 @@ def auth_apple():
     return _oauth_login_or_link(sess, 'apple', info['sub'], info['email'], data.get('claimUserId'))
 
 
+@app.route('/api/auth/change-password', methods=['POST'])
+@limiter.limit('10 per hour')
+@_require_user
+def change_password():
+    """Change the password for a signed-in user. If they already have a
+    password, the current one must be supplied. (An OAuth-only account can
+    set a password here without a current one.) Bumps token_version to log
+    out other sessions, and returns a fresh token for this one."""
+    sess = g.db
+    user = g.current_user
+    data = request.get_json(silent=True) or {}
+    new_pw = data.get('newPassword') or ''
+    if not isinstance(new_pw, str) or len(new_pw) < 8:
+        return jsonify({'error': 'New password must be at least 8 characters.'}), 400
+    if len(new_pw) > 200:
+        return jsonify({'error': 'Password is too long.'}), 400
+    if user.password_hash:
+        if not _check_pw(user.password_hash, data.get('currentPassword') or ''):
+            return jsonify({'error': 'Current password is incorrect.'}), 401
+    try:
+        user.password_hash = _hash_pw(new_pw)
+        user.token_version = int(getattr(user, 'token_version', 0) or 0) + 1
+        sess.commit()
+    except Exception as e:
+        sess.rollback()
+        app.logger.exception('change_password failed: %s', e)
+        return jsonify({'error': 'Could not change your password. Try again.'}), 500
+    return jsonify({'token': _mint_user_token(user), 'account': serialize_account(user)})
+
+
 # ── Data routes (per-user, auth required) ───────────────────────────────────────
 def _empty_state():
     return {'children': [], 'scores': {}, 'difficulty': 3, 'maxAllowance': 50}
