@@ -709,6 +709,7 @@ async function loadData() {
     });
 
     S.boy = S.children[0]?.name || '';
+    try { S.household = await API.req('GET', '/api/household'); } catch(_) { S.household = null; }
     return 'ok';
   } catch(e) {
     return (e && e.status === 401) ? 'auth' : 'error';
@@ -815,10 +816,57 @@ async function onAuthSuccess(resp, isSignup) {
   await loadData();
   S.authed = true; S.tab = 'grade'; S.msg = '';
   render();
+  maybeProcessPendingJoin();
 }
+
+// If the user arrived via a co-parent invite link, offer to join after sign-in.
+async function maybeProcessPendingJoin() {
+  if (!S.pendingJoin || !S.authed) return;
+  const code = S.pendingJoin; S.pendingJoin = '';
+  if (!confirm('Join a shared household? You\'ll see and manage the same children as the parent who invited you.')) return;
+  try {
+    await API.req('POST', '/api/household/join', { code });
+    await loadData();
+    S.tab = 'grade'; render();
+    showMsg('You\'re now sharing this household.', 'ok');
+  } catch(e) {
+    showMsg(e.message || 'Could not join the household', 'err');
+  }
+}
+// ─── Household (co-parent sharing) actions ────────────────────────────────────
+async function inviteCoParent() {
+  try {
+    const r = await API.req('POST', '/api/household/invite');
+    S.inviteLink = r.link;
+    render();
+  } catch(e) { showMsg(e.message || 'Could not create an invite', 'err'); }
+}
+async function joinByCode(code) {
+  if (!code) { showMsg('Paste an invite code first', 'warn'); return; }
+  try {
+    await API.req('POST', '/api/household/join', { code: code.trim() });
+    await loadData();
+    S.inviteLink = ''; S.tab = 'grade'; render();
+    showMsg('You\'re now sharing this household.', 'ok');
+  } catch(e) { showMsg(e.message || 'Could not join', 'err'); }
+}
+async function leaveHousehold(memberEmail) {
+  const msg = memberEmail
+    ? `Remove ${memberEmail} from your shared household?`
+    : 'Leave this shared household? You\'ll stop seeing these children (your own data, if any, comes back).';
+  if (!confirm(msg)) return;
+  try {
+    await API.req('POST', '/api/household/leave', memberEmail ? { memberEmail } : {});
+    await loadData();
+    render();
+    showMsg(memberEmail ? 'Co-parent removed.' : 'You left the household.', 'info');
+  } catch(e) { showMsg(e.message || 'Could not update sharing', 'err'); }
+}
+
 function logout() {
   API.token = '';
   localStorage.removeItem('rsc_token');
+  S.inviteLink = '';
   S.authed = false; S.account = null;
   S.children = []; S.scores = {}; S.baselines = {}; S.savedPhotos = {};
   S.boy = ''; S.result = null; S.regrade = false; S.photos = {}; S.thumbs = {};
@@ -1530,6 +1578,31 @@ function scoreRing(earned, max) {
   </svg>`;
 }
 
+// Mini line chart of this week's daily score % for a child (graded days only).
+// Returns '' when there are fewer than 2 graded days to connect.
+function weekSparkline(boy, color) {
+  const vals = DAYS.map(d => {
+    const e = (S.scores[boy] || {})[d];
+    if (!e) return null;
+    const rs = roomScore(e), bs = e.hasBath ? bathScore(e) : 0;
+    const max = e.hasBath ? 90 : 60;
+    return Math.round(((rs + bs) / max) * 100);
+  });
+  if (vals.filter(v => v != null).length < 2) return '';
+  const W = 120, H = 36, pad = 4;
+  const x = i => pad + i * (W - 2 * pad) / (DAYS.length - 1);
+  const y = v => H - pad - (v / 100) * (H - 2 * pad);
+  let path = '', started = false, dots = '';
+  vals.forEach((v, i) => {
+    if (v == null) return;
+    path += `${started ? 'L' : 'M'}${x(i).toFixed(1)} ${y(v).toFixed(1)} `;
+    started = true;
+    dots += `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="2.4" fill="${color}"/>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible">
+    <path d="${path}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>${dots}</svg>`;
+}
+
 // Friendly empty state (no children yet) with the brand mark + a CTA.
 function renderNoChildren(el) {
   const card = mkCard('');
@@ -1860,6 +1933,89 @@ function renderSetup(el) {
   hint2.textContent = 'Download after uploading baselines — protects against Safari clearing local data.';
   bCard.appendChild(hint2);
   el.appendChild(bCard);
+
+  // ── Co-parents (sharing) ──
+  const shareCard = mkCard('Co-parents');
+  const h = S.household || { role: 'solo', members: [] };
+  const sBody = document.createElement('div');
+  sBody.style.cssText = 'padding:4px 16px 14px;display:flex;flex-direction:column;gap:10px;';
+
+  const sText = document.createElement('div');
+  sText.className = 'hint'; sText.style.padding = '0';
+
+  if (h.role === 'member') {
+    sText.textContent = `You're sharing ${h.ownerEmail || 'another parent'}'s children — changes you make are shared with them.`;
+    sBody.appendChild(sText);
+    const leave = document.createElement('button');
+    leave.className = 'btn btn-ghost'; leave.style.alignSelf = 'flex-start';
+    leave.textContent = 'Leave shared household';
+    leave.onclick = () => leaveHousehold();
+    sBody.appendChild(leave);
+  } else {
+    sText.textContent = h.role === 'owner'
+      ? 'The other parent below shares these children with you.'
+      : 'Invite the other parent so you both manage the same children from your own accounts.';
+    sBody.appendChild(sText);
+
+    if (h.role === 'owner' && h.members.length) {
+      h.members.forEach(email => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:8px;';
+        const em = document.createElement('span');
+        em.style.cssText = 'flex:1;font-size:15px;'; em.textContent = email;
+        const rm = document.createElement('button');
+        rm.className = 'btn btn-ghost btn-sm'; rm.style.color = 'var(--err)';
+        rm.textContent = 'Remove';
+        rm.onclick = () => leaveHousehold(email);
+        row.appendChild(em); row.appendChild(rm);
+        sBody.appendChild(row);
+      });
+    }
+
+    const inviteBtn = document.createElement('button');
+    inviteBtn.className = 'btn btn-ghost'; inviteBtn.style.alignSelf = 'flex-start';
+    inviteBtn.textContent = h.members && h.members.length ? 'Invite another co-parent' : 'Invite a co-parent';
+    inviteBtn.onclick = inviteCoParent;
+    sBody.appendChild(inviteBtn);
+
+    if (S.inviteLink) {
+      const linkRow = document.createElement('div');
+      linkRow.style.cssText = 'display:flex;gap:8px;align-items:center;';
+      const linkInp = document.createElement('input');
+      linkInp.type = 'text'; linkInp.readOnly = true; linkInp.value = S.inviteLink;
+      linkInp.style.cssText = 'flex:1;background:transparent;color:var(--text);border:1.5px solid var(--sep);border-radius:10px;padding:9px 12px;font-size:13px;';
+      linkInp.onclick = () => linkInp.select();
+      const copy = document.createElement('button');
+      copy.className = 'btn btn-primary btn-sm'; copy.textContent = 'Copy';
+      copy.onclick = () => {
+        linkInp.select();
+        (navigator.clipboard ? navigator.clipboard.writeText(S.inviteLink) : Promise.reject())
+          .then(() => showMsg('Invite link copied — text it to the other parent.', 'ok'))
+          .catch(() => { try { document.execCommand('copy'); showMsg('Invite link copied.', 'ok'); } catch(_) { showMsg('Select the link and copy it.', 'info'); } });
+      };
+      linkRow.appendChild(linkInp); linkRow.appendChild(copy);
+      sBody.appendChild(linkRow);
+      const exp = document.createElement('div');
+      exp.className = 'hint'; exp.style.padding = '0';
+      exp.textContent = 'Send this link to the other parent. It works for 7 days; they sign in and tap to join.';
+      sBody.appendChild(exp);
+    }
+
+    if (h.role === 'solo') {
+      const codeRow = document.createElement('div');
+      codeRow.style.cssText = 'display:flex;gap:8px;align-items:center;margin-top:2px;';
+      const codeInp = document.createElement('input');
+      codeInp.type = 'text'; codeInp.placeholder = 'Have an invite code? Paste it';
+      codeInp.style.cssText = 'flex:1;background:transparent;color:var(--text);border:1.5px solid var(--sep);border-radius:10px;padding:9px 12px;font-size:14px;';
+      const joinBtn = document.createElement('button');
+      joinBtn.className = 'btn btn-ghost btn-sm'; joinBtn.textContent = 'Join';
+      joinBtn.onclick = () => joinByCode(codeInp.value);
+      codeRow.appendChild(codeInp); codeRow.appendChild(joinBtn);
+      sBody.appendChild(codeRow);
+    }
+  }
+  shareCard.appendChild(sBody);
+  el.appendChild(shareCard);
 
   // ── Account ──
   const acctCard = mkCard('Account');
@@ -2291,6 +2447,14 @@ function renderSummary(el) {
       allow.textContent = allowance(displayPct);
       card.appendChild(allow);
 
+      const spark = weekSparkline(boy, child.color);
+      if (spark) {
+        const sw = document.createElement('div');
+        sw.style.cssText = 'margin:8px 0 2px;';
+        sw.innerHTML = spark;
+        card.appendChild(sw);
+      }
+
       const brk = document.createElement('div'); brk.className = 'sum-break';
       brk.innerHTML = `${w.earned}&thinsp;/&thinsp;${w.possible} pts${!allWeekGraded ? `<br>actual ${w.pct}%` : ''}`;
       card.appendChild(brk);
@@ -2475,9 +2639,17 @@ async function init() {
   // Find out which social sign-in buttons to show.
   await loadAuthConfig();
 
+  // Co-parent invite link: ?join=<code>. Remember it; we'll offer to join
+  // after the user is signed in.
+  const params = new URLSearchParams(location.search);
+  const joinCode = params.get('join');
+  if (joinCode) {
+    S.pendingJoin = joinCode;
+    history.replaceState({}, document.title, location.pathname);
+  }
+
   // Password-reset link: ?reset=<token>. Show the reset screen and strip the
   // token from the address bar so it isn't left in history.
-  const params = new URLSearchParams(location.search);
   const resetTok = params.get('reset');
   if (resetTok) {
     history.replaceState({}, document.title, location.pathname);
@@ -2493,6 +2665,7 @@ async function init() {
     if (res === 'ok') {
       S.authed = true;
       render();
+      maybeProcessPendingJoin();
       return;
     }
     if (res === 'error') {

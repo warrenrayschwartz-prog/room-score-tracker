@@ -110,6 +110,13 @@ class User(Base):
     token_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default='0'
     )
+    # Multi-parent sharing: when set, this user is a co-parent who sees the
+    # data OWNED by household_owner_id (their own rows stay intact but hidden
+    # while joined). NULL = the user owns their own household. App-enforced
+    # (no FK) to keep the additive migration simple/portable.
+    household_owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), nullable=True, index=True
+    )
 
     state: Mapped['AppState | None'] = relationship(
         'AppState', back_populates='user', cascade='all, delete-orphan',
@@ -196,6 +203,16 @@ def init_db() -> None:
             'Could not create unique index on users.email_norm '
             '(possible pre-existing duplicate emails).'
         )
+    # Additive migration for the sharing column on already-created tables.
+    # Postgres supports ADD COLUMN IF NOT EXISTS; on SQLite (fresh dev DB) the
+    # column already exists from create_all, so this errors and is ignored.
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                'ALTER TABLE users ADD COLUMN IF NOT EXISTS household_owner_id UUID'
+            ))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def get_session():

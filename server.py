@@ -92,6 +92,11 @@ if not _AUTH_SECRET:
 _USER_SESSION_MAX_AGE = 60 * 60 * 24 * 60  # 60 days
 _user_token_signer = _URLSerializer(_AUTH_SECRET, salt='rsc-user-session')
 
+# Household (co-parent) invite tokens — short-lived, embed the inviting
+# household's owner id.
+_INVITE_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
+_invite_signer = _URLSerializer(_AUTH_SECRET, salt='rsc-household-invite')
+
 # Password-reset tokens: short-lived, separate salt. They embed the user's
 # current token_version, and a successful reset bumps it — so a link is
 # single-use and all other sessions are logged out on reset.
@@ -211,6 +216,9 @@ def _require_user(fn):
             return jsonify({'error': 'Sign in to continue.'}), 401
         g.current_user = user
         g.db = sess
+        # The household whose data this request reads/writes: the co-parent's
+        # owner if joined, otherwise the user themselves.
+        g.owner_id = getattr(user, 'household_owner_id', None) or user.id
         return fn(*args, **kwargs)
     return wrapped
 
@@ -556,12 +564,12 @@ def get_data():
     viewing a specific graded day, so the client fetches them lazily via
     GET /api/photo."""
     sess = g.db
-    user = g.current_user
-    st = sess.get(AppState, user.id)
+    owner = g.owner_id
+    st = sess.get(AppState, owner)
     state = (st.data if st and isinstance(st.data, dict) else None) or _empty_state()
     baselines = {}
     for img in (sess.query(Image)
-                .filter(Image.user_id == user.id, Image.kind == 'baseline').all()):
+                .filter(Image.user_id == owner, Image.kind == 'baseline').all()):
         baselines[img.key] = img.data
     return jsonify({'state': state, 'baselines': baselines})
 
@@ -573,12 +581,12 @@ def get_photo():
     Returns {data: {slotId: thumbnail}} (empty if none saved)."""
     import json as _json
     sess = g.db
-    user = g.current_user
+    owner = g.owner_id
     key = request.args.get('key') or ''
     if not key:
         return jsonify({'error': 'Missing key'}), 400
     img = (sess.query(Image)
-           .filter(Image.user_id == user.id, Image.kind == 'photo', Image.key == key)
+           .filter(Image.user_id == owner, Image.kind == 'photo', Image.key == key)
            .first())
     if img is None:
         return jsonify({'data': {}})
@@ -592,7 +600,7 @@ def get_photo():
 @_require_user
 def put_state():
     sess = g.db
-    user = g.current_user
+    owner = g.owner_id
     data = request.get_json(silent=True) or {}
     clean = {
         'children': data.get('children') or [],
@@ -600,9 +608,9 @@ def put_state():
         'difficulty': data.get('difficulty', 3),
         'maxAllowance': data.get('maxAllowance', 50),
     }
-    st = sess.get(AppState, user.id)
+    st = sess.get(AppState, owner)
     if st is None:
-        st = AppState(user_id=user.id, data=clean)
+        st = AppState(user_id=owner, data=clean)
         sess.add(st)
     else:
         st.data = clean
@@ -629,14 +637,14 @@ def put_image():
     """Save one image. body: {kind:'baseline'|'photo', key, data}.
     For photos, data is a JSON string of {slotId: thumbnail}."""
     sess = g.db
-    user = g.current_user
+    owner = g.owner_id
     data = request.get_json(silent=True) or {}
     kind = data.get('kind')
     key = data.get('key')
     payload = data.get('data')
     if kind not in ('baseline', 'photo') or not key or not isinstance(payload, str):
         return jsonify({'error': 'Bad image payload'}), 400
-    _upsert_image(sess, user.id, kind, key, payload)
+    _upsert_image(sess, owner, kind, key, payload)
     sess.commit()
     return jsonify({'ok': True})
 
@@ -645,14 +653,14 @@ def put_image():
 @_require_user
 def delete_image():
     sess = g.db
-    user = g.current_user
+    owner = g.owner_id
     data = request.get_json(silent=True) or {}
     kind = data.get('kind')
     key = data.get('key')
     if kind not in ('baseline', 'photo') or not key:
         return jsonify({'error': 'Bad request'}), 400
     sess.query(Image).filter(
-        Image.user_id == user.id, Image.kind == kind, Image.key == key
+        Image.user_id == owner, Image.kind == kind, Image.key == key
     ).delete()
     sess.commit()
     return jsonify({'ok': True})
@@ -664,17 +672,17 @@ def put_baselines():
     """Bulk replace all baseline images (used by Restore Baselines).
     body: {baselines: {key: dataURL}}."""
     sess = g.db
-    user = g.current_user
+    owner = g.owner_id
     data = request.get_json(silent=True) or {}
     baselines = data.get('baselines') or {}
     if not isinstance(baselines, dict):
         return jsonify({'error': 'Bad request'}), 400
     sess.query(Image).filter(
-        Image.user_id == user.id, Image.kind == 'baseline'
+        Image.user_id == owner, Image.kind == 'baseline'
     ).delete()
     for key, val in baselines.items():
         if isinstance(val, str) and val:
-            sess.add(Image(user_id=user.id, kind='baseline', key=key, data=val))
+            sess.add(Image(user_id=owner, kind='baseline', key=key, data=val))
     sess.commit()
     return jsonify({'ok': True})
 
@@ -688,15 +696,15 @@ def migrate():
     photos:{key:{slot:thumb}}}."""
     import json as _json
     sess = g.db
-    user = g.current_user
-    has_state = sess.get(AppState, user.id) is not None
-    has_images = sess.query(Image).filter(Image.user_id == user.id).first() is not None
+    owner = g.owner_id
+    has_state = sess.get(AppState, owner) is not None
+    has_images = sess.query(Image).filter(Image.user_id == owner).first() is not None
     if has_state or has_images:
         return jsonify({'ok': True, 'migrated': False})
     data = request.get_json(silent=True) or {}
     state = data.get('state')
     if isinstance(state, dict):
-        sess.add(AppState(user_id=user.id, data={
+        sess.add(AppState(user_id=owner, data={
             'children': state.get('children') or [],
             'scores': state.get('scores') or {},
             'difficulty': state.get('difficulty', 3),
@@ -704,10 +712,10 @@ def migrate():
         }))
     for key, val in (data.get('baselines') or {}).items():
         if isinstance(val, str) and val:
-            sess.add(Image(user_id=user.id, kind='baseline', key=key, data=val))
+            sess.add(Image(user_id=owner, kind='baseline', key=key, data=val))
     for key, val in (data.get('photos') or {}).items():
         if isinstance(val, dict) and val:
-            sess.add(Image(user_id=user.id, kind='photo', key=key, data=_json.dumps(val)))
+            sess.add(Image(user_id=owner, kind='photo', key=key, data=_json.dumps(val)))
     sess.commit()
     return jsonify({'ok': True, 'migrated': True})
 
@@ -721,6 +729,9 @@ def delete_account():
     sess = g.db
     user = g.current_user
     try:
+        # Any co-parents who joined this user's household lose access cleanly.
+        sess.query(User).filter(User.household_owner_id == user.id).update(
+            {User.household_owner_id: None}, synchronize_session=False)
         sess.delete(user)
         sess.commit()
     except Exception as e:
@@ -728,6 +739,98 @@ def delete_account():
         app.logger.exception('account deletion failed: %s', e)
         return jsonify({'error': 'Could not delete your account. Try again.'}), 500
     return jsonify({'ok': True})
+
+
+# ── Household / co-parent sharing ────────────────────────────────────────────────
+def _household_status(sess, user):
+    """Describe the user's household for the UI."""
+    if user.household_owner_id:
+        owner = sess.get(User, user.household_owner_id)
+        return {
+            'role': 'member',
+            'ownerEmail': (owner.email if owner else None),
+            'members': [],
+        }
+    members = (sess.query(User)
+               .filter(User.household_owner_id == user.id).all())
+    return {
+        'role': 'owner' if members else 'solo',
+        'ownerEmail': user.email,
+        'members': [m.email for m in members if m.email],
+    }
+
+
+@app.route('/api/household')
+@_require_user
+def household_status():
+    return jsonify(_household_status(g.db, g.current_user))
+
+
+@app.route('/api/household/invite', methods=['POST'])
+@limiter.limit('20 per hour')
+@_require_user
+def household_invite():
+    """Generate a co-parent invite for THIS user's household (the effective
+    owner). Returns a shareable link + raw code."""
+    owner_id = g.owner_id
+    code = _invite_signer.dumps(str(owner_id))
+    return jsonify({'code': code, 'link': f'{_APP_BASE_URL}/?join={code}'})
+
+
+@app.route('/api/household/join', methods=['POST'])
+@limiter.limit('20 per hour')
+@_require_user
+def household_join():
+    """Redeem an invite code to join another parent's household."""
+    sess = g.db
+    user = g.current_user
+    data = request.get_json(silent=True) or {}
+    code = (data.get('code') or '').strip()
+    try:
+        owner_id_str = _invite_signer.loads(code, max_age=_INVITE_MAX_AGE)
+        owner_uuid = uuid.UUID(str(owner_id_str))
+    except (_BadData, ValueError, AttributeError, TypeError):
+        return jsonify({'error': 'This invite is invalid or has expired. Ask for a new one.'}), 400
+    if owner_uuid == user.id:
+        return jsonify({'error': "That's your own invite link."}), 400
+    if user.household_owner_id:
+        return jsonify({'error': "You're already sharing a household. Leave it first."}), 400
+    # Don't let an owner-with-co-parents become a member (would orphan theirs).
+    if sess.query(User).filter(User.household_owner_id == user.id).first() is not None:
+        return jsonify({'error': "You're hosting a co-parent. Have them leave before you join another household."}), 400
+    owner = sess.get(User, owner_uuid)
+    if owner is None or bool(getattr(owner, 'disabled', False)):
+        return jsonify({'error': 'That household no longer exists.'}), 400
+    # Only join a root owner (no chains).
+    if owner.household_owner_id:
+        return jsonify({'error': 'This invite is invalid. Ask the main account holder for one.'}), 400
+    user.household_owner_id = owner_uuid
+    sess.commit()
+    return jsonify({'ok': True, 'household': _household_status(sess, user)})
+
+
+@app.route('/api/household/leave', methods=['POST'])
+@_require_user
+def household_leave():
+    """Leave a household you joined (your own data, if any, becomes visible
+    again). If you're the owner, removes a specific member by email."""
+    sess = g.db
+    user = g.current_user
+    data = request.get_json(silent=True) or {}
+    remove_email = _norm_email(data.get('memberEmail')) if data.get('memberEmail') else ''
+    if remove_email:
+        # Owner removing one of their co-parents.
+        m = (sess.query(User)
+             .filter(User.household_owner_id == user.id, User.email_norm == remove_email)
+             .first())
+        if m is not None:
+            m.household_owner_id = None
+            sess.commit()
+        return jsonify({'ok': True, 'household': _household_status(sess, user)})
+    # Member leaving their household.
+    user.household_owner_id = None
+    sess.commit()
+    return jsonify({'ok': True, 'household': _household_status(sess, user)})
 
 
 # ── Grading (auth required) ─────────────────────────────────────────────────────
