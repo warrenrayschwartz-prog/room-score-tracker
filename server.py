@@ -309,6 +309,11 @@ def index():
     return no_cache(make_response(send_from_directory(str(HERE), 'index.html')))
 
 
+@app.route('/privacy')
+def privacy():
+    return send_from_directory(str(HERE), 'privacy.html')
+
+
 # ── Home-screen / PWA assets ────────────────────────────────────────────────────
 @app.route('/manifest.webmanifest')
 def manifest():
@@ -675,6 +680,24 @@ def migrate():
             sess.add(Image(user_id=user.id, kind='photo', key=key, data=_json.dumps(val)))
     sess.commit()
     return jsonify({'ok': True, 'migrated': True})
+
+
+@app.route('/api/account', methods=['DELETE'])
+@_require_user
+def delete_account():
+    """Permanently delete the signed-in user and all their data (App Store
+    Guideline 5.1.1(v) requires in-app account deletion). Cascades to
+    AppState + Image rows via the ORM relationship / FK ON DELETE CASCADE."""
+    sess = g.db
+    user = g.current_user
+    try:
+        sess.delete(user)
+        sess.commit()
+    except Exception as e:
+        sess.rollback()
+        app.logger.exception('account deletion failed: %s', e)
+        return jsonify({'error': 'Could not delete your account. Try again.'}), 500
+    return jsonify({'ok': True})
 
 
 # ── Grading (auth required) ─────────────────────────────────────────────────────

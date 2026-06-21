@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Privacy Policy — Room Score Tracker</title>
+  <style>
+    :root { --bg:#F2F2F7; --surf:#fff; --text:#1c1c1e; --muted:#6E6E73; --accent:#007AFF; --sep:rgba(60,60,67,0.18); }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg:#000; --surf:#1C1C1E; --text:#fff; --muted:#9E9EA6; --accent:#0A84FF; --sep:rgba(84,84,88,0.55); }
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--text);
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;
+      line-height:1.6; -webkit-text-size-adjust:100%; }
+    .wrap { max-width:720px; margin:0 auto; padding:32px 20px 64px; }
+    .card { background:var(--surf); border-radius:16px; padding:28px 24px; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+    h1 { font-size:28px; letter-spacing:-0.5px; margin:0 0 4px; }
+    .updated { color:var(--muted); font-size:14px; margin-bottom:24px; }
+    h2 { font-size:18px; letter-spacing:-0.2px; margin:28px 0 8px; }
+    p, li { font-size:15px; color:var(--text); }
+    .muted { color:var(--muted); }
+    ul { padding-left:20px; }
+    li { margin-bottom:6px; }
+    a { color:var(--accent); text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    .back { display:inline-block; margin-bottom:18px; font-size:15px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <a class="back" href="/">← Back to Room Score Tracker</a>
+    <div class="card">
+      <h1>Privacy Policy</h1>
+      <div class="updated">Room Score Tracker · Last updated June 20, 2026</div>
+
+      <p>Room Score Tracker ("the app," "we," "us") is a tool that lets a parent or guardian
+      photograph a child's room and bathroom and receive a tidiness score to help manage an
+      allowance. This policy explains what we collect, how we use it, and the choices you have.</p>
+
+      <h2>Information we collect</h2>
+      <ul>
+        <li><strong>Account information</strong> — your email address and a securely hashed
+          password (we never store your password in plain text). If you sign in with Google or
+          Apple, we receive a unique identifier and, where you allow it, your email address.</li>
+        <li><strong>Content you create</strong> — the names you give your children, their
+          assigned colors and bathroom-day schedules, the baseline and daily photos you upload,
+          and the scores and allowance settings generated from them.</li>
+      </ul>
+
+      <h2>How we use it</h2>
+      <ul>
+        <li>To provide the app: storing your children, scores, and photos to your account so they
+          sync across your devices and aren't lost.</li>
+        <li>To grade rooms: the photos you submit for grading are sent to Anthropic's Claude API
+          to produce a tidiness score. They are processed for that request and not used to train
+          models.</li>
+        <li>To send essential account email (such as password-reset links) via our email
+          provider, Resend.</li>
+      </ul>
+
+      <h2>How your data is stored</h2>
+      <p>Your data is stored in a private database hosted on Railway. Each account's data is kept
+      separate, and you can only access your own. We use industry-standard encryption in transit
+      (HTTPS).</p>
+
+      <h2>Children's information</h2>
+      <p>This app is intended for use by parents and guardians, not by children. The photos and
+      names you add relate to your own children and are entered by you, the adult account holder.
+      We do not knowingly allow children to create accounts, and we do not use this content for
+      advertising or share it with third parties for their own purposes.</p>
+
+      <h2>Sharing</h2>
+      <p>We do not sell your data. We share it only with the service providers needed to run the
+      app — Anthropic (image grading), Railway (hosting/database), and Resend (account email) —
+      and only to the extent required to provide their service. We may disclose information if
+      required by law.</p>
+
+      <h2>Your choices and deletion</h2>
+      <ul>
+        <li><strong>Delete your account</strong> — you can permanently delete your account and all
+          associated data from within the app (Setup → Delete account). This removes your
+          children, scores, photos, and settings from our database and cannot be undone.</li>
+        <li><strong>Access and correction</strong> — you can view and edit your data in the app at
+          any time.</li>
+      </ul>
+
+      <h2>Data retention</h2>
+      <p>We keep your data for as long as your account exists. When you delete your account, your
+      data is removed from our active database.</p>
+
+      <h2>Changes</h2>
+      <p>We may update this policy; we'll revise the "Last updated" date above when we do.</p>
+
+      <h2>Contact</h2>
+      <p class="muted">Questions about this policy or your data? Contact the app operator at
+      <a href="mailto:warrenrayschwartz@gmail.com">warrenrayschwartz@gmail.com</a>.</p>
+    </div>
+  </div>
+</body>
+</html>

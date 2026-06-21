@@ -9,7 +9,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Room Score">
-  <meta name="theme-color" content="#FFFFFF">
+  <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1C1C1E" media="(prefers-color-scheme: dark)">
   <link rel="apple-touch-icon" href="/icon-180.png">
   <link rel="icon" type="image/png" href="/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
@@ -21,18 +22,47 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:     #F2F2F7;
-      --surf:   #FFFFFF;
-      --surf2:  #F2F2F7;
-      --sep:    rgba(60,60,67,0.18);
-      --accent: #007AFF;
-      --text:   #000000;
-      --text2:  #3C3C43;
-      --muted:  #8E8E93;
-      --ok:     #34C759;
-      --warn:   #FF9500;
-      --err:    #FF3B30;
-      --info:   #32ADE6;
+      --bg:      #F2F2F7;
+      --surf:    #FFFFFF;
+      --surf2:   #F2F2F7;
+      --sep:     rgba(60,60,67,0.18);
+      --accent:  #007AFF;
+      --text:    #000000;
+      --text2:   #3C3C43;
+      --muted:   #6E6E73;   /* darkened from #8E8E93 to meet WCAG AA on white */
+      --ok:      #248A3D;   /* AA-safe green for text on white */
+      --ok-fill: #34C759;   /* vivid green for fills/dots */
+      --warn:    #FF9500;
+      --err:     #D70015;   /* AA-safe red for text on white */
+      --err-fill:#FF3B30;
+      --info:    #32ADE6;
+      --nav-bg:  rgba(255,255,255,0.92);
+      --tab-bg:  rgba(250,250,252,0.96);
+      --hairline: rgba(60,60,67,0.29);
+      --tint:    rgba(0,0,0,0.05);   /* subtle hover/inset on light */
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg:      #000000;
+        --surf:    #1C1C1E;
+        --surf2:   #2C2C2E;
+        --sep:     rgba(84,84,88,0.55);
+        --accent:  #0A84FF;
+        --text:    #FFFFFF;
+        --text2:   #EBEBF5;
+        --muted:   #9E9EA6;
+        --ok:      #30D158;
+        --ok-fill: #30D158;
+        --warn:    #FF9F0A;
+        --err:     #FF453A;
+        --err-fill:#FF453A;
+        --info:    #64D2FF;
+        --nav-bg:  rgba(30,30,32,0.82);
+        --tab-bg:  rgba(22,22,24,0.92);
+        --hairline: rgba(84,84,88,0.6);
+        --tint:    rgba(255,255,255,0.08);
+      }
     }
 
     body {
@@ -47,10 +77,10 @@
 
     /* ── Navigation Bar ── */
     .hdr {
-      background: rgba(255,255,255,0.92);
+      background: var(--nav-bg);
       backdrop-filter: saturate(180%) blur(20px);
       -webkit-backdrop-filter: saturate(180%) blur(20px);
-      border-bottom: 0.5px solid rgba(60,60,67,0.29);
+      border-bottom: 0.5px solid var(--hairline);
       /* Clear the notch / Dynamic Island when installed full-screen */
       padding: calc(13px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) 11px calc(16px + env(safe-area-inset-left, 0px));
       text-align: center;
@@ -72,10 +102,10 @@
       bottom: 0; left: 0; right: 0;
       display: flex;
       align-items: center;
-      background: rgba(250,250,252,0.96);
+      background: var(--tab-bg);
       backdrop-filter: saturate(180%) blur(24px);
       -webkit-backdrop-filter: saturate(180%) blur(24px);
-      border-top: 0.5px solid rgba(60,60,67,0.18);
+      border-top: 0.5px solid var(--sep);
       padding: 10px calc(10px + env(safe-area-inset-right, 0px)) 10px calc(10px + env(safe-area-inset-left, 0px));
       padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
       z-index: 200;
@@ -92,7 +122,7 @@
       border: none;
       border-radius: 14px;
       background: transparent;
-      color: #8E8E93;
+      color: var(--muted);
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
       font-size: 11px;
       font-weight: 500;
@@ -116,7 +146,7 @@
     }
     .tab.on svg { stroke: #fff; transform: scale(1.06); }
     .tab:active { transform: scale(0.94); }
-    .tab:hover:not(.on) { background: rgba(0,0,0,0.05); color: var(--text2); }
+    .tab:hover:not(.on) { background: var(--tint); color: var(--text2); }
 
     /* ── Content ── */
     .page { padding: 8px 0 16px; max-width: 680px; margin: 0 auto; }
@@ -174,7 +204,7 @@
     .btn-primary { background: var(--accent); color: #fff; }
     .btn-ghost   { background: var(--surf); color: var(--accent); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
     .btn-danger  { background: var(--err); color: #fff; }
-    .btn-sm      { padding: 5px 12px; font-size: 13px; border-radius: 8px; }
+    .btn-sm      { padding: 5px 12px; font-size: 13px; border-radius: 8px; min-height: 36px; min-width: 36px; }
     .btn-full    { width: 100%; }
     .btn-wrap    { padding: 0 16px 8px; }
 
@@ -218,7 +248,8 @@
     .day-pill {
       flex-shrink: 0;
       position: relative;
-      padding: 7px 18px;
+      padding: 9px 18px;
+      min-height: 40px;
       border-radius: 20px;
       border: none;
       background: var(--surf);
@@ -289,6 +320,12 @@
     .msg.warn { background: rgba(255,149,0,0.12);  color: #a65c00; border: 1px solid rgba(255,149,0,0.3); }
     .msg.err  { background: rgba(255,59,48,0.12);  color: #cc1200; border: 1px solid rgba(255,59,48,0.3); }
     .msg.info { background: rgba(0,122,255,0.10);  color: #005cc5; border: 1px solid rgba(0,122,255,0.25); }
+    @media (prefers-color-scheme: dark) {
+      .msg.ok   { background: rgba(48,209,88,0.18);  color: #5be584; border-color: rgba(48,209,88,0.4); }
+      .msg.warn { background: rgba(255,159,10,0.18); color: #ffc15e; border-color: rgba(255,159,10,0.4); }
+      .msg.err  { background: rgba(255,69,58,0.18);  color: #ff8a80; border-color: rgba(255,69,58,0.4); }
+      .msg.info { background: rgba(10,132,255,0.18); color: #7fb8ff; border-color: rgba(10,132,255,0.4); }
+    }
 
     /* ── Progress bar ── */
     .prog-wrap { height: 4px; background: rgba(118,118,128,0.12); border-radius: 2px; overflow: hidden; margin: 0 16px 12px; }
@@ -547,6 +584,16 @@ const DIFFICULTY = [
 function todayDay() {
   const map = {1:'Mon',2:'Tue',3:'Wed',4:'Thu',5:'Fri',6:'Sat'};
   return map[new Date().getDay()] || 'Mon';
+}
+
+// Pick black or white text for legible contrast on a solid hex fill — so
+// white text doesn't sit unreadably on light child colors (orange/green).
+function readableOn(hex) {
+  const c = (hex || '').replace('#', '');
+  if (c.length < 6) return '#fff';
+  const r = parseInt(c.substr(0,2),16), g = parseInt(c.substr(2,2),16), b = parseInt(c.substr(4,2),16);
+  const L = 0.2126*r + 0.7152*g + 0.0722*b;   // perceived luminance (0–255)
+  return L > 150 ? '#000' : '#fff';
 }
 
 // ─── Child helpers ───────────────────────────────────────────────────────────
@@ -1188,7 +1235,7 @@ function renderAuthScreen() {
     card.appendChild(bar);
   }
 
-  const inpCss = 'width:100%;display:block;border:1.5px solid var(--sep);border-radius:10px;padding:12px 14px;font-size:16px;margin-bottom:12px;';
+  const inpCss = 'width:100%;display:block;background:transparent;color:var(--text);border:1.5px solid var(--sep);border-radius:10px;padding:12px 14px;font-size:16px;margin-bottom:12px;';
 
   // ── Forgot-password mode: email only ──
   if (mode === 'forgot') {
@@ -1353,6 +1400,11 @@ function renderAuthScreen() {
 
   el.appendChild(card);
 
+  const footer = document.createElement('div');
+  footer.style.cssText = 'max-width:380px;margin:0 auto;text-align:center;font-size:12px;color:var(--muted);';
+  footer.innerHTML = `<a href="/privacy" target="_blank" style="color:var(--muted);text-decoration:underline">Privacy Policy</a>`;
+  el.appendChild(footer);
+
   // Render Google's official button now that the container is in the DOM.
   if (AUTH.google && (mode === 'login' || mode === 'signup')) renderGoogleButton(0);
 }
@@ -1414,6 +1466,25 @@ const TAB_SVGS = {
   setup: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
 };
 
+// Inline line-icons (stroke=currentColor) matching the tab-bar icon style,
+// used to replace emoji throughout the UI for one consistent icon language.
+const ICON = {
+  droplet: `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M12 2.7S5.5 9.6 5.5 14a6.5 6.5 0 0 0 13 0C18.5 9.6 12 2.7 12 2.7z"/></svg>`,
+  printer: `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><rect x="6" y="13" width="12" height="8" rx="1"/></svg>`,
+  chart: `<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>`,
+  cloudOff: `<svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M18.7 18.7A5 5 0 0 0 18 9h-1.3A7 7 0 0 0 6 5.3"/><path d="M5.5 8.5A5 5 0 0 0 6 18h10"/></svg>`,
+  wave: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px"><path d="M18 11V6a1.5 1.5 0 0 0-3 0M15 6.5V4.5a1.5 1.5 0 0 0-3 0v2M12 6.5a1.5 1.5 0 0 0-3 0V12"/><path d="M9 9.5a1.5 1.5 0 0 0-3 0v3.5c0 3.6 2.4 6.5 6 6.5s6-2.6 6-6V9a1.5 1.5 0 0 0-3 0v2"/></svg>`,
+};
+// Signal-strength bars (1–5) — the difficulty indicator, replacing emoji faces.
+function signalBars(level) {
+  let bars = '';
+  for (let i = 0; i < 5; i++) {
+    const h = 6 + i * 3.5, x = 1.5 + i * 4.6, on = i < level;
+    bars += `<rect x="${x}" y="${22 - h}" width="3" height="${h}" rx="1.2" fill="${on ? 'currentColor' : 'var(--sep)'}"/>`;
+  }
+  return `<svg viewBox="0 0 24 24" width="22" height="22">${bars}</svg>`;
+}
+
 function renderTabs() {
   const el = document.getElementById('tabs');
   el.innerHTML = '';
@@ -1457,25 +1528,23 @@ function renderSetup(el) {
     welcomeCard.style.cssText = 'margin:16px 16px 10px;padding:20px 16px 18px;background:linear-gradient(135deg,rgba(0,122,255,0.08),rgba(88,86,214,0.08));border:1px solid rgba(0,122,255,0.18);';
 
     const welcomeTitle = document.createElement('div');
-    welcomeTitle.style.cssText = 'font-size:20px;font-weight:700;letter-spacing:-0.4px;margin-bottom:10px;';
-    welcomeTitle.textContent = '👋 Welcome to RoomTracker!';
-
-    const step1 = document.createElement('div');
-    step1.style.cssText = 'display:flex;gap:10px;margin-bottom:10px;align-items:flex-start;';
-    step1.innerHTML = `<span style="font-size:22px;line-height:1.2">1️⃣</span><span style="font-size:15px;line-height:1.5;color:var(--text2)">Start by adding your children's names below and selecting the days each one is responsible for a clean bathroom.</span>`;
-
-    const step2 = document.createElement('div');
-    step2.style.cssText = 'display:flex;gap:10px;margin-bottom:10px;align-items:flex-start;';
-    step2.innerHTML = `<span style="font-size:22px;line-height:1.2">2️⃣</span><span style="font-size:15px;line-height:1.5;color:var(--text2)">Then upload photos of what their room and bathroom look like when clean and organized. These become the baseline standard.</span>`;
-
-    const step3 = document.createElement('div');
-    step3.style.cssText = 'display:flex;gap:10px;align-items:flex-start;';
-    step3.innerHTML = `<span style="font-size:22px;line-height:1.2">3️⃣</span><span style="font-size:15px;line-height:1.5;color:var(--text2)">Each day, take new photos in the Grade tab — Claude will compare them to the baseline and score the room automatically.</span>`;
-
+    welcomeTitle.style.cssText = 'font-size:20px;font-weight:700;letter-spacing:-0.4px;margin-bottom:14px;display:flex;align-items:center;gap:8px;color:var(--accent);';
+    welcomeTitle.innerHTML = `${ICON.wave}<span style="color:var(--text)">Welcome to RoomTracker!</span>`;
     welcomeCard.appendChild(welcomeTitle);
-    welcomeCard.appendChild(step1);
-    welcomeCard.appendChild(step2);
-    welcomeCard.appendChild(step3);
+
+    const steps = [
+      "Start by adding your children's names below and selecting the days each one is responsible for a clean bathroom.",
+      'Then upload photos of what their room and bathroom look like when clean and organized. These become the baseline standard.',
+      'Each day, take new photos in the Grade tab — Claude will compare them to the baseline and score the room automatically.',
+    ];
+    steps.forEach((text, i) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:11px;align-items:flex-start;' + (i < 2 ? 'margin-bottom:12px;' : '');
+      row.innerHTML =
+        `<span style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;">${i + 1}</span>` +
+        `<span style="font-size:15px;line-height:1.5;color:var(--text2)">${text}</span>`;
+      welcomeCard.appendChild(row);
+    });
     el.appendChild(welcomeCard);
   }
 
@@ -1484,7 +1553,7 @@ function renderSetup(el) {
   const diffDesc = document.createElement('div');
   diffDesc.className = 'hint'; diffDesc.style.marginBottom = '12px';
   const cur = DIFFICULTY[S.difficulty - 1];
-  diffDesc.textContent = `${cur.emoji}  ${cur.label} — ${cur.desc}`;
+  diffDesc.textContent = `${cur.label} — ${cur.desc}`;
   diffCard.appendChild(diffDesc);
 
   const diffRow = document.createElement('div');
@@ -1492,7 +1561,7 @@ function renderSetup(el) {
   DIFFICULTY.forEach(d => {
     const btn = document.createElement('button');
     btn.className = 'diff-btn' + (S.difficulty === d.level ? ' on' : '');
-    btn.innerHTML = `<span>${d.emoji}</span><span>${d.level}</span><span style="font-size:9px;letter-spacing:.3px">${d.label.toUpperCase()}</span>`;
+    btn.innerHTML = `<span style="display:flex;align-items:flex-end;height:22px">${signalBars(d.level)}</span><span style="font-size:9px;letter-spacing:.3px">${d.label.toUpperCase()}</span>`;
     btn.onclick = () => { S.difficulty = d.level; saveDifficulty(); render(); };
     diffRow.appendChild(btn);
   });
@@ -1581,7 +1650,7 @@ function renderSetup(el) {
       // ── Bathroom days label ──
       const bathDaysLbl = document.createElement('div');
       bathDaysLbl.style.cssText = 'font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;margin-top:2px;';
-      bathDaysLbl.textContent = '🛁  Bathroom days';
+      bathDaysLbl.innerHTML = `<span style="color:var(--info)">${ICON.droplet}</span> Bathroom days`;
       row.appendChild(bathDaysLbl);
 
       // ── Day pills: tap to toggle bath day ──
@@ -1657,7 +1726,7 @@ function renderSetup(el) {
 
   const bathLbl = document.createElement('div');
   bathLbl.style.cssText = 'font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;';
-  bathLbl.textContent = '🛁  Bathroom days';
+  bathLbl.innerHTML = `<span style="color:var(--info)">${ICON.droplet}</span> Bathroom days`;
 
   // Use the same .day-row / .day-pill classes as the Grade tab's day selector
   const bathRow = document.createElement('div');
@@ -1721,6 +1790,49 @@ function renderSetup(el) {
   hint2.textContent = 'Download after uploading baselines — protects against Safari clearing local data.';
   bCard.appendChild(hint2);
   el.appendChild(bCard);
+
+  // ── Account ──
+  const acctCard = mkCard('Account');
+  if (S.account && S.account.email) {
+    const who = document.createElement('div');
+    who.className = 'hint';
+    who.style.cssText = 'padding:4px 16px 10px;';
+    who.textContent = 'Signed in as ' + S.account.email;
+    acctCard.appendChild(who);
+  }
+  const acctRow = document.createElement('div');
+  acctRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;padding:0 16px 12px;';
+
+  const signOutBtn = document.createElement('button');
+  signOutBtn.className = 'btn btn-ghost';
+  signOutBtn.textContent = 'Sign out';
+  signOutBtn.onclick = () => { autoSave(); logout(); };
+  acctRow.appendChild(signOutBtn);
+
+  const delBtn = document.createElement('button');
+  delBtn.style.cssText = 'border:1.5px solid var(--err);color:var(--err);background:transparent;padding:13px 20px;font-size:17px;font-weight:600;border-radius:14px;cursor:pointer;font-family:inherit;';
+  delBtn.textContent = 'Delete account';
+  delBtn.onclick = async () => {
+    if (!confirm('Delete your account? This permanently erases your children, scores, baseline photos, and settings. This cannot be undone.')) return;
+    if (!confirm('Are you absolutely sure? There is no way to recover this data.')) return;
+    delBtn.disabled = true; delBtn.textContent = 'Deleting…';
+    try {
+      await API.req('DELETE', '/api/account');
+      logout();
+      showMsg('Your account and all data have been deleted.', 'info');
+    } catch(e) {
+      delBtn.disabled = false; delBtn.textContent = 'Delete account';
+      showMsg(e.message || 'Could not delete account', 'err');
+    }
+  };
+  acctRow.appendChild(delBtn);
+  acctCard.appendChild(acctRow);
+
+  const acctHint = document.createElement('div');
+  acctHint.className = 'hint';
+  acctHint.innerHTML = 'Deleting removes everything from our servers permanently. &nbsp;·&nbsp; <a href="/privacy" target="_blank" style="color:var(--accent);text-decoration:none">Privacy Policy</a>';
+  acctCard.appendChild(acctHint);
+  el.appendChild(acctCard);
 }
 
 // ── Saved score view ──
@@ -1812,7 +1924,7 @@ function renderGrade(el) {
     btn.className = 'child-btn';
     const isOn = S.boy === child.name;
     if (isOn) {
-      btn.style.cssText = `background:${child.color};color:#fff;box-shadow:0 4px 14px ${child.color}66;`;
+      btn.style.cssText = `background:${child.color};color:${readableOn(child.color)};box-shadow:0 4px 14px ${child.color}66;`;
     } else {
       btn.style.cssText = `background:${child.color}22;color:${child.color};`;
     }
@@ -1915,7 +2027,7 @@ function renderGrade(el) {
     const childColor = getChild(S.boy)?.color || 'var(--accent)';
     const gradeBtn = document.createElement('button');
     gradeBtn.className = 'btn btn-full';
-    gradeBtn.style.cssText = `margin: 0 16px 8px; width: calc(100% - 32px); background:${childColor}; color:#fff; padding:13px 20px; border-radius:14px; font-size:17px; font-weight:600; cursor:pointer; border:none;`;
+    gradeBtn.style.cssText = `margin: 0 16px 8px; width: calc(100% - 32px); background:${childColor}; color:${readableOn(childColor)}; padding:13px 20px; border-radius:14px; font-size:17px; font-weight:600; cursor:pointer; border:none;`;
     gradeBtn.textContent = `Grade ${S.boy}'s Room`;
     gradeBtn.onclick = gradePhotos;
     el.appendChild(gradeBtn);
@@ -1995,7 +2107,7 @@ function renderSummary(el) {
   printWrap.style.cssText = 'display:flex;justify-content:flex-end;padding:4px 16px 8px;';
   const printBtn = document.createElement('button');
   printBtn.className = 'btn btn-ghost btn-sm no-print';
-  printBtn.innerHTML = '🖨️ &nbsp;Print';
+  printBtn.innerHTML = `${ICON.printer} &nbsp;Print`;
   printBtn.onclick = () => window.print();
   printWrap.appendChild(printBtn);
   el.appendChild(printWrap);
@@ -2021,7 +2133,7 @@ function renderSummary(el) {
     if (!w) {
       const emp = document.createElement('div');
       emp.style.cssText = 'padding:12px 0 6px;text-align:center;';
-      emp.innerHTML = `<div style="font-size:26px;margin-bottom:6px">📊</div><div style="font-size:13px;color:var(--muted);line-height:1.4">No scores yet<br><span style="font-size:11px">Head to Grade to start</span></div>`;
+      emp.innerHTML = `<div style="color:var(--muted);margin-bottom:8px;display:flex;justify-content:center">${ICON.chart}</div><div style="font-size:13px;color:var(--muted);line-height:1.4">No scores yet<br><span style="font-size:11px">Head to Grade to start</span></div>`;
       card.appendChild(emp);
     } else {
       const allWeekGraded = w.daysGraded === w.totalDays;
@@ -2040,7 +2152,7 @@ function renderSummary(el) {
 
       // Progress bar in child color
       const barWrap = document.createElement('div');
-      barWrap.style.cssText = 'height:4px;background:rgba(0,0,0,0.07);border-radius:2px;margin:8px 0 10px;overflow:hidden;';
+      barWrap.style.cssText = 'height:4px;background:var(--tint);border-radius:2px;margin:8px 0 10px;overflow:hidden;';
       const barFill = document.createElement('div');
       barFill.style.cssText = `height:100%;width:${Math.min(displayPct,100)}%;border-radius:2px;background:${child.color};`;
       barWrap.appendChild(barFill);
@@ -2105,7 +2217,7 @@ function renderSummary(el) {
 
         // Mini score bar
         const miniBar = document.createElement('div');
-        miniBar.style.cssText = 'flex:1;height:4px;background:rgba(0,0,0,0.06);border-radius:2px;overflow:hidden;margin:0 8px;';
+        miniBar.style.cssText = 'flex:1;height:4px;background:var(--tint);border-radius:2px;overflow:hidden;margin:0 8px;';
         const miniFill = document.createElement('div');
         miniFill.style.cssText = `height:100%;width:${pct}%;background:${barColor};border-radius:2px;`;
         miniBar.appendChild(miniFill);
@@ -2269,7 +2381,7 @@ function renderConnError() {
   const card = document.createElement('div');
   card.className = 'card';
   card.style.cssText = 'max-width:380px;margin:40px auto 16px;padding:28px 20px;text-align:center;';
-  card.innerHTML = `<div style="font-size:34px;margin-bottom:10px">📡</div>
+  card.innerHTML = `<div style="color:var(--muted);margin-bottom:12px;display:flex;justify-content:center">${ICON.cloudOff}</div>
     <div style="font-size:18px;font-weight:700;margin-bottom:6px">Can't reach the server</div>
     <div style="font-size:14px;color:var(--muted);line-height:1.5;margin-bottom:18px">
       You're still signed in — this looks like a connection problem. Check your internet and try again.</div>`;
