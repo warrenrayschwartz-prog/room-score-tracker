@@ -157,6 +157,34 @@
     .splash-text { font-size:14px; color:var(--muted); letter-spacing:.2px; }
     @keyframes rscPulse { 0%,100% { opacity:.5; transform:scale(.95); } 50% { opacity:1; transform:scale(1); } }
 
+    /* ── Photo source action sheet ── */
+    .sheet-overlay {
+      position: fixed; inset: 0; z-index: 500;
+      background: rgba(0,0,0,0.4);
+      display: flex; align-items: flex-end; justify-content: center;
+      animation: sheetFade 0.18s ease;
+    }
+    .sheet {
+      width: 100%; max-width: 480px;
+      background: var(--surf);
+      border-radius: 18px 18px 0 0;
+      padding: 10px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+      box-shadow: 0 -4px 24px rgba(0,0,0,0.18);
+      animation: sheetUp 0.22s cubic-bezier(.22,.61,.36,1);
+    }
+    .sheet-head { text-align: center; font-size: 12px; color: var(--muted); padding: 8px 0 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .sheet-btn {
+      width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+      padding: 15px; margin-top: 8px; border: none; border-radius: 14px;
+      background: var(--bg); color: var(--text);
+      font-family: inherit; font-size: 17px; font-weight: 600; cursor: pointer;
+    }
+    .sheet-btn.primary { background: var(--accent); color: #fff; }
+    .sheet-btn .sheet-ic { display: inline-flex; }
+    .sheet-cancel { background: transparent; color: var(--accent); font-weight: 600; margin-top: 10px; }
+    @keyframes sheetFade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes sheetUp { from { transform: translateY(100%); } to { transform: none; } }
+
     /* ── Page transition (on tab change) ── */
     @keyframes pageIn { from { opacity:0; transform:translateY(7px); } to { opacity:1; transform:none; } }
     .page-anim { animation: pageIn 0.22s cubic-bezier(.22,.61,.36,1); }
@@ -1086,10 +1114,16 @@ function makeSlot(uid, label, initB64, onDone, isBaseline, onThumb) {
   btn.className = 'slot-btn';
   btn.setAttribute('aria-label', 'Upload ' + label);
 
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.style.cssText = 'position:absolute;width:0;height:0;opacity:0;overflow:hidden;pointer-events:none';
+  const hiddenCss = 'position:absolute;width:0;height:0;opacity:0;overflow:hidden;pointer-events:none';
+  // Camera: capture="environment" opens the device camera directly on mobile.
+  const camInput = document.createElement('input');
+  camInput.type = 'file'; camInput.accept = 'image/*';
+  camInput.setAttribute('capture', 'environment');
+  camInput.style.cssText = hiddenCss;
+  // Library: no capture → opens the photo library / file picker.
+  const libInput = document.createElement('input');
+  libInput.type = 'file'; libInput.accept = 'image/*';
+  libInput.style.cssText = hiddenCss;
 
   let imgEl = null;
   function setImg(b64) {
@@ -1100,7 +1134,7 @@ function makeSlot(uid, label, initB64, onDone, isBaseline, onThumb) {
     imgEl.src = b64;
     plus.style.display = 'none';
   }
-  btn.onclick = () => input.click();
+  btn.onclick = () => showPhotoSheet(label, () => camInput.click(), () => libInput.click());
 
   async function processFile(file) {
     if (!file) return;
@@ -1121,7 +1155,8 @@ function makeSlot(uid, label, initB64, onDone, isBaseline, onThumb) {
     }
   }
 
-  input.onchange = () => processFile(input.files[0]);
+  camInput.onchange = () => processFile(camInput.files[0]);
+  libInput.onchange = () => processFile(libInput.files[0]);
 
   wrap.addEventListener('dragover', e => { e.preventDefault(); wrap.classList.add('drag-over'); });
   wrap.addEventListener('dragleave', () => wrap.classList.remove('drag-over'));
@@ -1141,9 +1176,40 @@ function makeSlot(uid, label, initB64, onDone, isBaseline, onThumb) {
   wrap.appendChild(plus);
   wrap.appendChild(lbl);
   wrap.appendChild(btn);
-  wrap.appendChild(input);
+  wrap.appendChild(camInput);
+  wrap.appendChild(libInput);
   if (initB64) setImg(initB64);
   return wrap;
+}
+
+// Bottom action sheet: Take Photo (camera) vs Choose from Library.
+function showPhotoSheet(title, onTake, onPick) {
+  const prev = document.getElementById('photo-sheet');
+  if (prev) prev.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'photo-sheet';
+  overlay.className = 'sheet-overlay';
+  const sheet = document.createElement('div');
+  sheet.className = 'sheet';
+  const close = () => overlay.remove();
+  const mk = (label, icon, fn, primary) => {
+    const b = document.createElement('button');
+    b.className = 'sheet-btn' + (primary ? ' primary' : '');
+    b.innerHTML = `<span class="sheet-ic">${icon}</span><span>${label}</span>`;
+    b.onclick = () => { close(); fn(); };
+    return b;
+  };
+  const head = document.createElement('div'); head.className = 'sheet-head'; head.textContent = title || 'Add photo';
+  sheet.appendChild(head);
+  sheet.appendChild(mk('Take Photo', ICON.cameraSmall, onTake, true));
+  sheet.appendChild(mk('Choose from Library', ICON.library, onPick, false));
+  const cancel = document.createElement('button');
+  cancel.className = 'sheet-btn sheet-cancel'; cancel.textContent = 'Cancel';
+  cancel.onclick = close;
+  sheet.appendChild(cancel);
+  overlay.appendChild(sheet);
+  overlay.onclick = e => { if (e.target === overlay) close(); };
+  document.body.appendChild(overlay);
 }
 
 // ─── AI Grading ──────────────────────────────────────────────────────────────
@@ -1636,6 +1702,7 @@ const ICON = {
   wave: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px"><path d="M18 11V6a1.5 1.5 0 0 0-3 0M15 6.5V4.5a1.5 1.5 0 0 0-3 0v2M12 6.5a1.5 1.5 0 0 0-3 0V12"/><path d="M9 9.5a1.5 1.5 0 0 0-3 0v3.5c0 3.6 2.4 6.5 6 6.5s6-2.6 6-6V9a1.5 1.5 0 0 0-3 0v2"/></svg>`,
   camera: `<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
   cameraSmall: `<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="3.5"/></svg>`,
+  library: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>`,
 };
 // Signal-strength bars (1–5) — the difficulty indicator, replacing emoji faces.
 function signalBars(level) {
