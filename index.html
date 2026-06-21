@@ -2159,7 +2159,9 @@ function renderSetup(el) {
   // Baseline photo sections — one card per room (shared rooms once; per-child
   // rooms once per child), each with that room's number of baseline slots.
   function roomBaseCard(room, boy) {
-    const title = room.shared ? `${room.name} Baselines (shared)` : `${boy}'s ${room.name} Baselines`;
+    const title = room.shared
+      ? `${room.name} Baselines (what the room should look like · shared)`
+      : `${boy}'s ${room.name} Baselines (what the room should look like)`;
     const card = mkCard(title);
     const grid = document.createElement('div');
     grid.className = 'slot-grid';
