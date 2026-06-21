@@ -178,6 +178,24 @@ class Image(Base):
 def init_db() -> None:
     """Create tables if they don't exist. Safe to call on every boot."""
     Base.metadata.create_all(bind=engine)
+    # Enforce one account per email at the DB level (closes the signup
+    # check-then-insert race). Partial so the many NULL email_norm rows of
+    # OAuth-only accounts don't collide. IF NOT EXISTS + the partial WHERE
+    # syntax are supported by both Postgres and SQLite (>=3.8). Wrapped so a
+    # pre-existing duplicate (shouldn't happen) doesn't crash boot.
+    from sqlalchemy import text
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                'CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email_norm '
+                'ON users (email_norm) WHERE email_norm IS NOT NULL'
+            ))
+    except Exception:  # noqa: BLE001 - best effort; log-and-continue on boot
+        import logging
+        logging.getLogger(__name__).exception(
+            'Could not create unique index on users.email_norm '
+            '(possible pre-existing duplicate emails).'
+        )
 
 
 def get_session():

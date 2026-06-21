@@ -590,13 +590,37 @@ async function loadAuthConfig() {
 
 // ─── Server-backed photo storage (kind='photo', key=`${boy}|${day}`) ──────────
 async function _putPhoto(boy, day, photos) {
-  try { await API.req('PUT', '/api/image', { kind:'photo', key:`${boy}|${day}`, data: JSON.stringify(photos || {}) }); } catch(e) {}
+  try {
+    await API.req('PUT', '/api/image', { kind:'photo', key:`${boy}|${day}`, data: JSON.stringify(photos || {}) });
+    return true;
+  } catch(e) { return false; }
 }
 async function _deletePhoto(boy, day) {
   try { await API.req('DELETE', '/api/image', { kind:'photo', key:`${boy}|${day}` }); } catch(e) {}
 }
+// Daily photos are fetched on demand (not in the bulk /api/data load).
+async function ensurePhotosLoaded(boy, day) {
+  if (!S.savedPhotos[boy]) S.savedPhotos[boy] = {};
+  if (S.savedPhotos[boy][day] !== undefined) return;     // already loaded (incl. {})
+  S.savedPhotos[boy][day] = {};                          // mark loaded to avoid refetch loop
+  try {
+    const d = await API.req('GET', '/api/photo?key=' + encodeURIComponent(boy + '|' + day));
+    S.savedPhotos[boy][day] = d.data || {};
+  } catch(e) { /* leave {} */ }
+  render();
+}
 
-// ─── Load everything for the signed-in user ───────────────────────────────────
+// ─── Server-backed baseline storage (single key per slot) ──────────────────────
+async function _putBaseline(key, data) {
+  try { await API.req('PUT', '/api/image', { kind:'baseline', key, data }); return true; } catch(e) { return false; }
+}
+async function _deleteBaseline(key) {
+  try { await API.req('DELETE', '/api/image', { kind:'baseline', key }); } catch(e) {}
+}
+
+// ─── Load state + baselines for the signed-in user ────────────────────────────
+// Returns 'ok' | 'auth' (401, bad/expired token) | 'error' (network/server).
+// Daily photos are loaded lazily per day (see ensurePhotosLoaded).
 async function loadData() {
   try {
     const d = await API.req('GET', '/api/data');
@@ -611,19 +635,13 @@ async function loadData() {
     S.savedPhotos = {};
     S.children.forEach(c => {
       if (!S.scores[c.name]) S.scores[c.name] = {};
-      S.savedPhotos[c.name] = {};
-    });
-    Object.entries(d.photos || {}).forEach(([key, photos]) => {
-      const idx = key.indexOf('|');
-      const boy = key.slice(0, idx), day = key.slice(idx + 1);
-      if (!S.savedPhotos[boy]) S.savedPhotos[boy] = {};
-      S.savedPhotos[boy][day] = photos;
+      S.savedPhotos[c.name] = {};   // per-day photos fetched on demand
     });
 
     S.boy = S.children[0]?.name || '';
-    return true;
+    return 'ok';
   } catch(e) {
-    return false;
+    return (e && e.status === 401) ? 'auth' : 'error';
   }
 }
 
@@ -644,17 +662,10 @@ function saveChildren()     { saveState(); }
 function saveDifficulty()   { saveState(); }
 function saveMaxAllowance() { saveState(); }
 
-function savePhotos() {
-  S.children.forEach(c =>
-    Object.entries(S.savedPhotos[c.name] || {}).forEach(([day, photos]) =>
-      _putPhoto(c.name, day, photos)
-    )
-  );
-}
-
+// Bulk replace the whole baseline set — used ONLY by Restore Baselines.
+// Individual baseline add/remove uses _putBaseline/_deleteBaseline (one row).
 let _blTimer = null;
 function saveBaselines() {
-  // Bulk replace the user's baseline set (handles add, remove, and restore).
   if (_blTimer) clearTimeout(_blTimer);
   _blTimer = setTimeout(() => {
     API.req('PUT', '/api/baselines', { baselines: S.baselines })
@@ -705,7 +716,7 @@ async function maybeMigrateLocalData() {
     const hasAny = children.length || Object.keys(scores).length ||
                    Object.keys(baselines).length || Object.keys(photos).length;
     if (!hasAny) return;
-    await API.req('POST', '/api/migrate', {
+    const r = await API.req('POST', '/api/migrate', {
       state: {
         children, scores,
         difficulty: (diff >= 1 && diff <= 5) ? diff : 3,
@@ -714,7 +725,15 @@ async function maybeMigrateLocalData() {
       baselines,
       photos,
     });
+    // Once the data is safely on the account, clear the on-device copy so a
+    // *different* account signing in on this device can't absorb it later.
+    if (r && r.migrated) _clearLegacyLocalData();
   } catch(e) {}
+}
+function _clearLegacyLocalData() {
+  ['rsc_children','rsc_scores_v4','rsc_baselines_v1','rsc_difficulty','rsc_maxAllowance','rsc_photos_v1']
+    .forEach(k => { try { localStorage.removeItem(k); } catch(_) {} });
+  try { indexedDB.deleteDatabase('rsc_photos'); } catch(_) {}
 }
 
 // ─── Auth flow helpers ────────────────────────────────────────────────────────
@@ -749,7 +768,10 @@ function showMsg(text, type='ok') {
 
 // pct = 0–100 percentage earned this week
 function allowance(pct, maxAmt) {
-  const m = (maxAmt != null ? maxAmt : S.maxAllowance) || 50;
+  // Note: a max of 0 is a valid choice (no payout) — only fall back to 50
+  // when the value is genuinely missing/invalid, not just falsy.
+  let m = maxAmt != null ? maxAmt : S.maxAllowance;
+  if (typeof m !== 'number' || isNaN(m) || m < 0) m = 50;
   if (pct >= 90) return '$' + Math.round(m);
   if (pct >= 80) return '$' + Math.round(m * 0.90);
   if (pct >= 70) return '$' + Math.round(m * 0.80);
@@ -1021,7 +1043,7 @@ async function gradePhotos() {
   }
 }
 
-function saveResult() {
+async function saveResult() {
   if (!S.result) return;
   const r = S.result;
   const boy = S.boy, day = S.day;
@@ -1031,10 +1053,14 @@ function saveResult() {
   if (!S.scores[boy]) S.scores[boy] = {};
   S.scores[boy][day] = entry;
   if (!S.savedPhotos[boy]) S.savedPhotos[boy] = {};
-  S.savedPhotos[boy][day] = { ...S.thumbs };
-  saveScores(); savePhotos();
+  const photos = { ...S.thumbs };
+  S.savedPhotos[boy][day] = photos;
+  saveScores();                                  // scores (debounced state)
+  const ok = await _putPhoto(boy, day, photos);  // just this day's photos
   S.result = null; S.regrade = false; S.photos = {}; S.thumbs = {};
-  showMsg(`${boy}'s ${day} saved!`, 'ok');
+  showMsg(ok ? `${boy}'s ${day} saved!`
+             : `${boy}'s ${day} scores saved — but photos didn't upload (check your connection).`,
+          ok ? 'ok' : 'warn');
 }
 
 function autoSave() {
@@ -1047,8 +1073,9 @@ function autoSave() {
   if (!S.scores[boy]) S.scores[boy] = {};
   S.scores[boy][day] = entry;
   if (!S.savedPhotos[boy]) S.savedPhotos[boy] = {};
-  S.savedPhotos[boy][day] = { ...S.thumbs };
-  saveScores(); savePhotos();
+  const photos = { ...S.thumbs };
+  S.savedPhotos[boy][day] = photos;
+  saveScores(); _putPhoto(boy, day, photos);     // just this day's photos
   S.result = null; S.regrade = false; S.photos = {}; S.thumbs = {};
 }
 
@@ -1073,8 +1100,12 @@ function restoreBaselines() {
     document.body.removeChild(inp);
     const file = inp.files[0]; if (!file) return;
     try {
-      S.baselines = JSON.parse(await file.text());
-      saveBaselines();
+      const parsed = JSON.parse(await file.text());
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('That file is not a valid baselines backup.');
+      }
+      S.baselines = parsed;
+      saveBaselines();   // bulk replace is correct here (full restore)
       showMsg('Baselines restored!', 'ok');
       render();
     } catch(e) { showMsg('Restore failed: ' + e.message, 'err'); }
@@ -1333,7 +1364,7 @@ function _googleHandleCredential(resp) {
   (async () => {
     try {
       const r = await API.req('POST', '/api/auth/google', { credential: resp.credential });
-      await onAuthSuccess(r, true);
+      await onAuthSuccess(r, !!r.created);   // migrate only for brand-new accounts
     } catch(e) { showMsg(e.message || 'Google sign-in failed', 'err'); }
   })();
 }
@@ -1372,7 +1403,7 @@ function startAppleSignIn() {
     try {
       const token = resp && resp.authorization && resp.authorization.id_token;
       const r = await API.req('POST', '/api/auth/apple', { identityToken: token });
-      await onAuthSuccess(r, true);
+      await onAuthSuccess(r, !!r.created);   // migrate only for brand-new accounts
     } catch(e) { showMsg(e.message || 'Apple sign-in failed', 'err'); }
   }).catch(() => {});
 }
@@ -1530,14 +1561,18 @@ function renderSetup(el) {
         DAYS.forEach(d => _deletePhoto(child.name, d));
         delete S.scores[child.name];
         delete S.savedPhotos[child.name];
-        BASE_ROOM.forEach(sl => delete S.baselines[`${child.name}|${sl.id}`]);
+        BASE_ROOM.forEach(sl => {
+          const k = `${child.name}|${sl.id}`;
+          delete S.baselines[k];
+          _deleteBaseline(k);   // remove just this child's baseline rows
+        });
         S.children.splice(i, 1);
         if (S.boy === child.name) {
           S.boy = S.children[0]?.name || '';
           S.result = null; S.regrade = false; S.photos = {}; S.thumbs = {};
           gradingToken++; S.grading = false; S.gradePct = 0;
         }
-        saveChildren(); saveScores(); saveBaselines();
+        saveChildren(); saveScores();
         showMsg(`${child.name} removed`, 'info');
       };
       topLine.appendChild(removeBtn);
@@ -1658,7 +1693,7 @@ function renderSetup(el) {
     slots.forEach(sl => {
       const key = `${prefix}|${sl.id}`;
       grid.appendChild(makeSlot(`base-${key}`, sl.label, S.baselines[key]||null,
-        b64 => { S.baselines[key] = b64; saveBaselines(); }, true));
+        b64 => { S.baselines[key] = b64; _putBaseline(key, b64); }, true));
     });
     card.appendChild(grid);
     return card;
@@ -1696,6 +1731,10 @@ function renderSavedScore(el, entry) {
 
   const sec = mkCard(`Saved Score — ${boy} / ${day}`);
 
+  // Photos for this day are fetched on demand the first time it's viewed.
+  if (!S.savedPhotos[boy] || S.savedPhotos[boy][day] === undefined) {
+    ensurePhotosLoaded(boy, day);   // sets the day, then re-renders with photos
+  }
   const dayPhotos = S.savedPhotos[boy]?.[day] || {};
   if (Object.keys(dayPhotos).length > 0) {
     const needSlots = [...DAILY_ROOM, ...(hasBath ? DAILY_BATH : [])];
@@ -2198,21 +2237,48 @@ async function init() {
     return;
   }
 
-  // If we have a saved token, try to load the account's data. A 401 means
-  // the token is stale — fall through to the sign-in screen.
+  // If we have a saved token, try to load the account's data.
   if (API.token) {
-    const ok = await loadData();
-    if (ok) {
+    const res = await loadData();
+    if (res === 'ok') {
       S.authed = true;
       render();
       return;
     }
+    if (res === 'error') {
+      // Network/server hiccup — DON'T discard the session; let the user retry.
+      renderConnError();
+      return;
+    }
+    // res === 'auth': token is stale/invalid → clear it and show sign-in.
     API.token = '';
     localStorage.removeItem('rsc_token');
   }
 
   S.authMode = 'login';
   render();
+}
+
+// Shown when a returning user's data couldn't load due to a connection/server
+// problem. The saved token is kept; tapping Retry re-runs init().
+function renderConnError() {
+  const tabsEl = document.getElementById('tabs');
+  if (tabsEl) tabsEl.style.display = 'none';
+  const el = document.getElementById('page');
+  el.innerHTML = '';
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.style.cssText = 'max-width:380px;margin:40px auto 16px;padding:28px 20px;text-align:center;';
+  card.innerHTML = `<div style="font-size:34px;margin-bottom:10px">📡</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:6px">Can't reach the server</div>
+    <div style="font-size:14px;color:var(--muted);line-height:1.5;margin-bottom:18px">
+      You're still signed in — this looks like a connection problem. Check your internet and try again.</div>`;
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-primary btn-full';
+  btn.textContent = 'Retry';
+  btn.onclick = () => { el.innerHTML = ''; init(); };
+  card.appendChild(btn);
+  el.appendChild(card);
 }
 init();
 </script>

@@ -5,6 +5,8 @@ gunicorn>=21,<24
 # SQLite fallback for local dev when DATABASE_URL is unset.
 SQLAlchemy>=2.0,<3
 psycopg2-binary>=2.9,<3
+# Rate limiting on the auth endpoints (brute-force / reset-email-bomb).
+flask-limiter>=3,<5
 # Auth: Apple Sign In verifies the identity token (RS256 against Apple's
 # JWKS). Email/password hashing uses werkzeug and session tokens use
 # itsdangerous, both of which ship with Flask (no extra dependency).

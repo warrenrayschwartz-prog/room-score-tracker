@@ -47,6 +47,22 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB (images are big)
 
 HERE = Path(__file__).parent
 
+# ── Rate limiting ────────────────────────────────────────────────────────────
+# Throttle auth endpoints to blunt password brute-force and reset-email
+# bombing. Keyed on the real client IP (Railway puts it in X-Forwarded-For;
+# request.remote_addr would otherwise be the shared proxy IP).
+from flask_limiter import Limiter
+
+
+def _client_ip():
+    xff = request.headers.get('X-Forwarded-For', '')
+    if xff:
+        return xff.split(',')[0].strip()
+    return request.remote_addr or '127.0.0.1'
+
+
+limiter = Limiter(key_func=_client_ip, app=app, default_limits=[])
+
 # Create tables on boot (no-op if they already exist).
 init_db()
 
@@ -260,6 +276,7 @@ def _oauth_login_or_link(sess, provider, sub, email, claim):
             cand = sess.query(User).filter(User.email_norm == email).first()
             if cand is not None and not cand.password_hash:
                 user = cand
+        created = user is None
         if user is None:
             user = User()
             sess.add(user)
@@ -276,7 +293,10 @@ def _oauth_login_or_link(sess, provider, sub, email, claim):
                 user.email = email
                 user.email_norm = email
         sess.commit()
-        return jsonify({'token': _mint_user_token(user), 'account': serialize_account(user)})
+        # 'created' lets the client decide whether to run the one-time
+        # on-device data migration (only for brand-new accounts).
+        return jsonify({'token': _mint_user_token(user),
+                        'account': serialize_account(user), 'created': created})
     except Exception as e:
         sess.rollback()
         app.logger.exception('oauth login failed (%s): %s', provider, e)
@@ -331,6 +351,7 @@ def auth_config():
 
 
 @app.route('/api/auth/signup', methods=['POST'])
+@limiter.limit('10 per hour')
 def auth_signup():
     sess = SessionLocal()
     data = request.get_json(silent=True) or {}
@@ -365,6 +386,7 @@ def auth_signup():
 
 
 @app.route('/api/auth/login', methods=['POST'])
+@limiter.limit('20 per hour;10 per minute')
 def auth_login():
     sess = SessionLocal()
     data = request.get_json(silent=True) or {}
@@ -388,6 +410,7 @@ def auth_login():
 
 
 @app.route('/api/auth/forgot', methods=['POST'])
+@limiter.limit('5 per hour;3 per minute')
 def auth_forgot():
     """Send a password-reset link. Always returns a generic success so it
     never reveals whether an email is registered."""
@@ -426,6 +449,7 @@ def auth_forgot():
 
 
 @app.route('/api/auth/reset', methods=['POST'])
+@limiter.limit('20 per hour')
 def auth_reset():
     """Complete a password reset. Verifies the token, sets the new password,
     bumps token_version (invalidating the link + all other sessions), and
@@ -459,6 +483,7 @@ def auth_me():
 
 
 @app.route('/api/auth/google', methods=['POST'])
+@limiter.limit('30 per hour')
 def auth_google():
     if not _google_auth_enabled():
         return jsonify({'error': 'Google sign-in is not available.'}), 503
@@ -471,6 +496,7 @@ def auth_google():
 
 
 @app.route('/api/auth/apple', methods=['POST'])
+@limiter.limit('30 per hour')
 def auth_apple():
     if not _apple_auth_enabled():
         return jsonify({'error': 'Apple sign-in is not available.'}), 503
@@ -490,23 +516,41 @@ def _empty_state():
 @app.route('/api/data')
 @_require_user
 def get_data():
-    """Everything the logged-in user needs to render the app in one shot."""
-    import json as _json
+    """State + baselines for the logged-in user. Daily photos are NOT
+    included here — they can be many large blobs and are only needed when
+    viewing a specific graded day, so the client fetches them lazily via
+    GET /api/photo."""
     sess = g.db
     user = g.current_user
     st = sess.get(AppState, user.id)
     state = (st.data if st and isinstance(st.data, dict) else None) or _empty_state()
     baselines = {}
-    photos = {}
-    for img in sess.query(Image).filter(Image.user_id == user.id).all():
-        if img.kind == 'baseline':
-            baselines[img.key] = img.data
-        elif img.kind == 'photo':
-            try:
-                photos[img.key] = _json.loads(img.data)
-            except Exception:
-                photos[img.key] = {}
-    return jsonify({'state': state, 'baselines': baselines, 'photos': photos})
+    for img in (sess.query(Image)
+                .filter(Image.user_id == user.id, Image.kind == 'baseline').all()):
+        baselines[img.key] = img.data
+    return jsonify({'state': state, 'baselines': baselines})
+
+
+@app.route('/api/photo')
+@_require_user
+def get_photo():
+    """Fetch one day's saved photos on demand. Query: key=`<child>|<day>`.
+    Returns {data: {slotId: thumbnail}} (empty if none saved)."""
+    import json as _json
+    sess = g.db
+    user = g.current_user
+    key = request.args.get('key') or ''
+    if not key:
+        return jsonify({'error': 'Missing key'}), 400
+    img = (sess.query(Image)
+           .filter(Image.user_id == user.id, Image.kind == 'photo', Image.key == key)
+           .first())
+    if img is None:
+        return jsonify({'data': {}})
+    try:
+        return jsonify({'data': _json.loads(img.data)})
+    except Exception:
+        return jsonify({'data': {}})
 
 
 @app.route('/api/state', methods=['PUT'])
