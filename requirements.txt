@@ -13,3 +13,6 @@ flask-limiter>=3,<5
 PyJWT[crypto]>=2.8,<3
 # Used to verify Google ID tokens against Google's tokeninfo endpoint.
 requests>=2.31,<3
+# Web Push reminders (bundles py-vapid + cryptography). Optional at runtime;
+# push endpoints return 503 until VAPID keys are configured.
+pywebpush>=2,<3

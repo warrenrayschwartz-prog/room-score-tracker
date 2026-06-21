@@ -180,6 +180,27 @@ class Image(Base):
     user: Mapped[User] = relationship('User', back_populates='images')
 
 
+class PushSub(Base):
+    """A browser Web Push subscription for a user (one per device/browser).
+    `data` is the full PushSubscription JSON; `endpoint` is unique so the same
+    device re-subscribing updates rather than duplicates."""
+    __tablename__ = 'push_subs'
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey('users.id', ondelete='CASCADE'),
+        nullable=False, index=True,
+    )
+    endpoint: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    data: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 # ── Init ───────────────────────────────────────────────────────────────────
 
 def init_db() -> None:

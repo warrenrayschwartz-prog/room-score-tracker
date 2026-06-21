@@ -658,6 +658,70 @@ async function loadAuthConfig() {
   } catch(e) {}
 }
 
+// ─── Web Push (daily reminders) ───────────────────────────────────────────────
+const PUSH = { enabled: false, publicKey: '' };
+async function loadPushConfig() {
+  try {
+    const c = await API.req('GET', '/api/push/config');
+    PUSH.enabled = !!c.enabled; PUSH.publicKey = c.publicKey || '';
+  } catch(e) {}
+}
+function _urlB64ToU8(b64) {
+  const pad = '='.repeat((4 - b64.length % 4) % 4);
+  const s = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(s); const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+function _pushSupported() {
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+async function refreshPushState() {
+  S.pushChecked = true;
+  S.pushSupported = _pushSupported();
+  if (!S.pushSupported) { S.pushOn = false; render(); return; }
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    S.pushOn = !!sub;
+  } catch(e) { S.pushOn = false; }
+  render();
+}
+async function enableReminders() {
+  if (!_pushSupported()) { showMsg('This browser can\'t do reminders.', 'warn'); return; }
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { showMsg('Allow notifications to get reminders.', 'warn'); return; }
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: _urlB64ToU8(PUSH.publicKey),
+    });
+    await API.req('POST', '/api/push/subscribe', sub.toJSON ? sub.toJSON() : sub);
+    S.pushOn = true; render();
+    showMsg('Daily reminders are on for this device.', 'ok');
+  } catch(e) { showMsg(e.message || 'Could not enable reminders', 'err'); }
+}
+async function disableReminders() {
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    if (sub) {
+      try { await API.req('POST', '/api/push/unsubscribe', { endpoint: sub.endpoint }); } catch(_) {}
+      await sub.unsubscribe();
+    }
+    S.pushOn = false; render();
+    showMsg('Reminders turned off.', 'info');
+  } catch(e) { showMsg(e.message || 'Could not turn off reminders', 'err'); }
+}
+async function sendTestReminder() {
+  try {
+    const r = await API.req('POST', '/api/push/test');
+    showMsg(r.sent ? 'Test reminder sent — check your notifications.' : 'No active device to notify.', r.sent ? 'ok' : 'warn');
+  } catch(e) { showMsg(e.message || 'Could not send test', 'err'); }
+}
+
 // ─── Server-backed photo storage (kind='photo', key=`${boy}|${day}`) ──────────
 async function _putPhoto(boy, day, photos) {
   try {
@@ -1934,6 +1998,45 @@ function renderSetup(el) {
   bCard.appendChild(hint2);
   el.appendChild(bCard);
 
+  // ── Daily reminders (web push) ──
+  if (PUSH.enabled) {
+    const remCard = mkCard('Daily Reminder');
+    const rBody = document.createElement('div');
+    rBody.style.cssText = 'padding:4px 16px 14px;display:flex;flex-direction:column;gap:10px;';
+    if (!S.pushChecked) refreshPushState();   // async; re-renders when known
+
+    const rText = document.createElement('div');
+    rText.className = 'hint'; rText.style.padding = '0';
+
+    if (S.pushChecked && !S.pushSupported) {
+      rText.innerHTML = "To get a daily nudge to grade the rooms, add this app to your Home Screen first (Share → Add to Home Screen), then open it from the icon. Reminders need iOS 16.4+.";
+      rBody.appendChild(rText);
+    } else {
+      rText.textContent = S.pushOn
+        ? 'You\'ll get a daily reminder on this device to grade the rooms.'
+        : 'Get a daily nudge on this device to photograph and grade the rooms.';
+      rBody.appendChild(rText);
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;flex-wrap:wrap;gap:10px;';
+      const toggle = document.createElement('button');
+      toggle.className = S.pushOn ? 'btn btn-ghost' : 'btn btn-primary';
+      toggle.style.alignSelf = 'flex-start';
+      toggle.textContent = S.pushOn ? 'Turn off reminders' : 'Enable daily reminders';
+      toggle.onclick = () => (S.pushOn ? disableReminders() : enableReminders());
+      row.appendChild(toggle);
+      if (S.pushOn) {
+        const test = document.createElement('button');
+        test.className = 'btn btn-ghost';
+        test.textContent = 'Send test';
+        test.onclick = sendTestReminder;
+        row.appendChild(test);
+      }
+      rBody.appendChild(row);
+    }
+    remCard.appendChild(rBody);
+    el.appendChild(remCard);
+  }
+
   // ── Co-parents (sharing) ──
   const shareCard = mkCard('Co-parents');
   const h = S.household || { role: 'solo', members: [] };
@@ -2636,8 +2739,11 @@ async function init() {
   // Branded splash while we check the session / load data (no blank flash).
   if (API.token) renderSplash();
 
-  // Find out which social sign-in buttons to show.
+  // Find out which social sign-in buttons + reminders are available.
   await loadAuthConfig();
+  await loadPushConfig();
+  // Register the service worker (push receiver) — best effort.
+  if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').catch(() => {}); }
 
   // Co-parent invite link: ?join=<code>. Remember it; we'll offer to join
   // after the user is signed in.

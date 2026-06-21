@@ -29,6 +29,7 @@ from db import (
     User,
     AppState,
     Image,
+    PushSub,
     init_db,
     serialize_account,
 )
@@ -109,6 +110,63 @@ _reset_token_signer = _URLSerializer(_AUTH_SECRET, salt='rsc-pw-reset')
 _RESEND_API_KEY = (os.environ.get('RESEND_API_KEY') or '').strip()
 _MAIL_FROM = (os.environ.get('MAIL_FROM') or 'Room Score Tracker <noreply@room-score-tracker.com>').strip()
 _APP_BASE_URL = (os.environ.get('APP_BASE_URL') or 'https://room-score-tracker.com').strip().rstrip('/')
+
+
+# ── Web Push (VAPID) ─────────────────────────────────────────────────────────
+_VAPID_PUBLIC_KEY = (os.environ.get('VAPID_PUBLIC_KEY') or '').strip()
+_VAPID_PRIVATE_KEY = (os.environ.get('VAPID_PRIVATE_KEY') or '').strip().replace('\\n', '\n')
+_VAPID_SUBJECT = (os.environ.get('VAPID_SUBJECT') or 'mailto:warrenrayschwartz@gmail.com').strip()
+_CRON_KEY = (os.environ.get('CRON_KEY') or '').strip()
+
+_vapid = None  # loaded py_vapid instance, when configured
+if _VAPID_PUBLIC_KEY and _VAPID_PRIVATE_KEY:
+    try:
+        from py_vapid import Vapid01
+        try:
+            _vapid = Vapid01.from_pem(_VAPID_PRIVATE_KEY.encode())
+        except Exception:
+            from cryptography.hazmat.primitives.serialization import load_pem_private_key
+            _key = load_pem_private_key(_VAPID_PRIVATE_KEY.encode(), password=None)
+            _vapid = Vapid01(); _vapid.private_key = _key; _vapid.public_key = _key.public_key()
+    except Exception as e:
+        app.logger.exception('Could not load VAPID keys: %s', e)
+        _vapid = None
+
+
+def _push_enabled():
+    return bool(_vapid and _VAPID_PUBLIC_KEY)
+
+
+def _send_push(sess, sub, payload):
+    """Send one push. Prunes the subscription if the endpoint is gone
+    (404/410). Returns True on success."""
+    import json as _json
+    try:
+        from pywebpush import webpush, WebPushException
+    except Exception:
+        return False
+    try:
+        webpush(
+            subscription_info=_json.loads(sub.data),
+            data=_json.dumps(payload),
+            vapid_private_key=_vapid,
+            vapid_claims={'sub': _VAPID_SUBJECT},
+            timeout=10,
+        )
+        return True
+    except WebPushException as e:
+        code = getattr(getattr(e, 'response', None), 'status_code', None)
+        if code in (404, 410):
+            try:
+                sess.delete(sub); sess.commit()
+            except Exception:
+                sess.rollback()
+        else:
+            app.logger.warning('push send failed (%s): %s', code, e)
+        return False
+    except Exception as e:
+        app.logger.warning('push send error: %s', e)
+        return False
 
 
 def _send_email(to, subject, html):
@@ -320,6 +378,14 @@ def index():
 @app.route('/privacy')
 def privacy():
     return send_from_directory(str(HERE), 'privacy.html')
+
+
+@app.route('/sw.js')
+def service_worker():
+    resp = make_response(send_from_directory(str(HERE), 'sw.js', mimetype='application/javascript'))
+    resp.headers['Service-Worker-Allowed'] = '/'
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
 
 
 # ── Home-screen / PWA assets ────────────────────────────────────────────────────
@@ -831,6 +897,85 @@ def household_leave():
     user.household_owner_id = None
     sess.commit()
     return jsonify({'ok': True, 'household': _household_status(sess, user)})
+
+
+# ── Web Push reminders ───────────────────────────────────────────────────────
+@app.route('/api/push/config')
+def push_config():
+    """Lets the client know whether push is available and the public key."""
+    return jsonify({'enabled': _push_enabled(), 'publicKey': _VAPID_PUBLIC_KEY})
+
+
+@app.route('/api/push/subscribe', methods=['POST'])
+@_require_user
+def push_subscribe():
+    if not _push_enabled():
+        return jsonify({'error': 'Reminders are not available yet.'}), 503
+    import json as _json
+    sess = g.db
+    user = g.current_user
+    sub = request.get_json(silent=True) or {}
+    endpoint = sub.get('endpoint')
+    if not endpoint:
+        return jsonify({'error': 'Bad subscription'}), 400
+    existing = sess.query(PushSub).filter(PushSub.endpoint == endpoint).first()
+    if existing is not None:
+        existing.user_id = user.id
+        existing.data = _json.dumps(sub)
+    else:
+        sess.add(PushSub(user_id=user.id, endpoint=endpoint, data=_json.dumps(sub)))
+    sess.commit()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/push/unsubscribe', methods=['POST'])
+@_require_user
+def push_unsubscribe():
+    sess = g.db
+    data = request.get_json(silent=True) or {}
+    endpoint = data.get('endpoint')
+    if endpoint:
+        sess.query(PushSub).filter(PushSub.endpoint == endpoint).delete()
+    else:
+        sess.query(PushSub).filter(PushSub.user_id == g.current_user.id).delete()
+    sess.commit()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/push/test', methods=['POST'])
+@_require_user
+def push_test():
+    if not _push_enabled():
+        return jsonify({'error': 'Reminders are not available yet.'}), 503
+    sess = g.db
+    subs = sess.query(PushSub).filter(PushSub.user_id == g.current_user.id).all()
+    sent = sum(1 for s in subs if _send_push(sess, s, {
+        'title': 'Room Score Tracker',
+        'body': "Test reminder — you're all set! 🎉",
+        'url': '/',
+    }))
+    return jsonify({'ok': True, 'sent': sent})
+
+
+@app.route('/api/cron/reminders', methods=['POST', 'GET'])
+def cron_reminders():
+    """Send the daily 'grade today's rooms' reminder to every subscriber.
+    Protected by the CRON_KEY header so only the scheduler can trigger it."""
+    if not _CRON_KEY or request.headers.get('X-Cron-Key', '') != _CRON_KEY:
+        return jsonify({'error': 'Forbidden'}), 403
+    if not _push_enabled():
+        return jsonify({'error': 'Push not configured'}), 503
+    sess = SessionLocal()
+    subs = sess.query(PushSub).all()
+    sent = 0
+    for s in subs:
+        if _send_push(sess, s, {
+            'title': 'Room Score Tracker',
+            'body': "Time to grade today's rooms 📷",
+            'url': '/',
+        }):
+            sent += 1
+    return jsonify({'ok': True, 'subscribers': len(subs), 'sent': sent})
 
 
 # ── Grading (auth required) ─────────────────────────────────────────────────────
