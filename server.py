@@ -76,6 +76,44 @@ if not _AUTH_SECRET:
 _USER_SESSION_MAX_AGE = 60 * 60 * 24 * 60  # 60 days
 _user_token_signer = _URLSerializer(_AUTH_SECRET, salt='rsc-user-session')
 
+# Password-reset tokens: short-lived, separate salt. They embed the user's
+# current token_version, and a successful reset bumps it — so a link is
+# single-use and all other sessions are logged out on reset.
+_RESET_MAX_AGE = 60 * 30  # 30 minutes
+_reset_token_signer = _URLSerializer(_AUTH_SECRET, salt='rsc-pw-reset')
+
+# Transactional email (Resend). Reset emails only send when RESEND_API_KEY
+# is configured; until then /api/auth/forgot still returns a generic success
+# (so it never reveals whether an email is registered).
+_RESEND_API_KEY = (os.environ.get('RESEND_API_KEY') or '').strip()
+_MAIL_FROM = (os.environ.get('MAIL_FROM') or 'Room Score Tracker <noreply@room-score-tracker.com>').strip()
+_APP_BASE_URL = (os.environ.get('APP_BASE_URL') or 'https://room-score-tracker.com').strip().rstrip('/')
+
+
+def _send_email(to, subject, html):
+    """Send one email via Resend. Returns True on success. Never raises."""
+    if not _RESEND_API_KEY:
+        app.logger.error('RESEND_API_KEY not set — cannot send reset email to %s', to)
+        return False
+    try:
+        import requests as _rq
+        r = _rq.post(
+            'https://api.resend.com/emails',
+            headers={
+                'Authorization': f'Bearer {_RESEND_API_KEY}',
+                'content-type': 'application/json',
+            },
+            json={'from': _MAIL_FROM, 'to': [to], 'subject': subject, 'html': html},
+            timeout=10,
+        )
+        if r.status_code not in (200, 201):
+            app.logger.error('Resend send failed (%s): %s', r.status_code, r.text[:200])
+            return False
+        return True
+    except Exception as e:
+        app.logger.exception('send email failed: %s', e)
+        return False
+
 # OAuth providers activate only when configured. Client IDs are public.
 _GOOGLE_CLIENT_ID = (os.environ.get('GOOGLE_CLIENT_ID') or '').strip()
 _APPLE_CLIENT_ID = (os.environ.get('APPLE_CLIENT_ID') or '').strip()  # Services ID
@@ -108,6 +146,29 @@ def _resolve_user_token(token, sess):
         return None
     try:
         data = _user_token_signer.loads(token, max_age=_USER_SESSION_MAX_AGE)
+    except _BadData:
+        return None
+    try:
+        uid = uuid.UUID(str(data.get('u')))
+    except (ValueError, AttributeError, TypeError):
+        return None
+    user = sess.get(User, uid)
+    if user is None or bool(getattr(user, 'disabled', False)):
+        return None
+    if int(getattr(user, 'token_version', 0) or 0) != int(data.get('v', -1)):
+        return None
+    return user
+
+
+def _mint_reset_token(user):
+    return _reset_token_signer.dumps({'u': str(user.id), 'v': int(user.token_version or 0)})
+
+
+def _resolve_reset_token(token, sess):
+    if not token:
+        return None
+    try:
+        data = _reset_token_signer.loads(token, max_age=_RESET_MAX_AGE)
     except _BadData:
         return None
     try:
@@ -294,6 +355,71 @@ def auth_login():
         return generic, 401
     if bool(getattr(user, 'disabled', False)):
         return jsonify({'error': 'This account has been disabled.'}), 403
+    return jsonify({'token': _mint_user_token(user), 'account': serialize_account(user)})
+
+
+@app.route('/api/auth/forgot', methods=['POST'])
+def auth_forgot():
+    """Send a password-reset link. Always returns a generic success so it
+    never reveals whether an email is registered."""
+    sess = SessionLocal()
+    data = request.get_json(silent=True) or {}
+    email = _norm_email(data.get('email'))
+    if email:
+        try:
+            user = sess.query(User).filter(User.email_norm == email).first()
+            # Only password accounts can reset (OAuth-only accounts have no
+            # password to reset).
+            if user is not None and user.password_hash and not bool(getattr(user, 'disabled', False)):
+                token = _mint_reset_token(user)
+                link = f'{_APP_BASE_URL}/?reset={token}'
+                html = (
+                    '<div style="font-family:-apple-system,Helvetica,Arial,sans-serif;'
+                    'max-width:480px;margin:0 auto;color:#111">'
+                    '<h2 style="margin:0 0 12px">Reset your password</h2>'
+                    '<p style="font-size:15px;line-height:1.5;color:#333">'
+                    'We got a request to reset your Room Score Tracker password. '
+                    'Click the button below to choose a new one. This link expires in 30 minutes.</p>'
+                    f'<p style="margin:22px 0"><a href="{link}" '
+                    'style="background:#007AFF;color:#fff;text-decoration:none;'
+                    'padding:12px 22px;border-radius:10px;font-weight:600;font-size:15px;'
+                    'display:inline-block">Reset password</a></p>'
+                    '<p style="font-size:13px;color:#888;line-height:1.5">'
+                    'If you didn\'t request this, you can safely ignore this email — '
+                    'your password won\'t change. '
+                    f'Or paste this link into your browser:<br><span style="color:#007AFF;word-break:break-all">{link}</span></p>'
+                    '</div>'
+                )
+                _send_email(user.email or email, 'Reset your Room Score Tracker password', html)
+        except Exception as e:
+            app.logger.exception('auth_forgot failed: %s', e)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/auth/reset', methods=['POST'])
+def auth_reset():
+    """Complete a password reset. Verifies the token, sets the new password,
+    bumps token_version (invalidating the link + all other sessions), and
+    returns a fresh session token so the user is logged straight in."""
+    sess = SessionLocal()
+    data = request.get_json(silent=True) or {}
+    token = data.get('token') or ''
+    password = data.get('password') or ''
+    if not isinstance(password, str) or len(password) < 8:
+        return jsonify({'error': 'Password must be at least 8 characters.'}), 400
+    if len(password) > 200:
+        return jsonify({'error': 'Password is too long.'}), 400
+    user = _resolve_reset_token(token, sess)
+    if user is None:
+        return jsonify({'error': 'This reset link is invalid or has expired. Request a new one.'}), 400
+    try:
+        user.password_hash = _hash_pw(password)
+        user.token_version = int(getattr(user, 'token_version', 0) or 0) + 1
+        sess.commit()
+    except Exception as e:
+        sess.rollback()
+        app.logger.exception('auth_reset failed: %s', e)
+        return jsonify({'error': 'Could not reset your password. Try again.'}), 500
     return jsonify({'token': _mint_user_token(user), 'account': serialize_account(user)})
 
 

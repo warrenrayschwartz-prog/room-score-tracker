@@ -1112,22 +1112,31 @@ function renderAuthScreen() {
   const el = document.getElementById('page');
   el.innerHTML = '';
 
-  const mode = S.authMode || 'login';   // 'login' | 'signup'
+  const mode = S.authMode || 'login';   // 'login' | 'signup' | 'forgot' | 'reset'
 
   const card = document.createElement('div');
   card.className = 'card';
   card.style.cssText = 'max-width:380px;margin:24px auto 16px;padding:24px 20px;';
 
+  const TITLES = {
+    login: 'Welcome back', signup: 'Create your account',
+    forgot: 'Reset your password', reset: 'Set a new password',
+  };
+  const SUBS = {
+    login: 'Sign in to see your children and scores.',
+    signup: 'Your children, scores, and photos are saved to your account and never lost.',
+    forgot: "Enter your email and we'll send you a link to reset your password.",
+    reset: 'Choose a new password for your account.',
+  };
+
   const title = document.createElement('div');
   title.style.cssText = 'font-size:22px;font-weight:700;letter-spacing:-0.4px;text-align:center;margin-bottom:4px;';
-  title.textContent = mode === 'login' ? 'Welcome back' : 'Create your account';
+  title.textContent = TITLES[mode];
   card.appendChild(title);
 
   const sub = document.createElement('div');
   sub.style.cssText = 'font-size:14px;color:var(--muted);text-align:center;margin-bottom:20px;line-height:1.4;';
-  sub.textContent = mode === 'login'
-    ? 'Sign in to see your children and scores.'
-    : 'Your children, scores, and photos are saved to your account and never lost.';
+  sub.textContent = SUBS[mode];
   card.appendChild(sub);
 
   if (S.msg) {
@@ -1138,17 +1147,100 @@ function renderAuthScreen() {
     card.appendChild(bar);
   }
 
+  const inpCss = 'border:1.5px solid var(--sep);border-radius:10px;padding:12px 14px;font-size:16px;margin-bottom:12px;';
+
+  // ── Forgot-password mode: email only ──
+  if (mode === 'forgot') {
+    const emailInp = document.createElement('input');
+    emailInp.type = 'email'; emailInp.placeholder = 'Email'; emailInp.autocomplete = 'email';
+    emailInp.style.cssText = inpCss;
+    card.appendChild(emailInp);
+
+    const submit = document.createElement('button');
+    submit.className = 'btn btn-primary btn-full';
+    submit.textContent = 'Send reset link';
+    submit.onclick = async () => {
+      const email = emailInp.value.trim();
+      if (!email) { showMsg('Enter your email', 'warn'); return; }
+      submit.disabled = true; submit.textContent = 'Sending…';
+      try {
+        await API.req('POST', '/api/auth/forgot', { email });
+        S.authMode = 'login'; S.msg = '';
+        render();
+        showMsg("If an account exists for that email, a reset link is on its way. Check your inbox.", 'ok');
+      } catch(e) {
+        showMsg(e.message || 'Something went wrong', 'err');
+        submit.disabled = false; submit.textContent = 'Send reset link';
+      }
+    };
+    emailInp.onkeydown = e => { if (e.key === 'Enter') submit.click(); };
+    card.appendChild(submit);
+
+    const back = document.createElement('div');
+    back.style.cssText = 'text-align:center;font-size:14px;margin-top:18px;';
+    back.innerHTML = `<span style="color:var(--accent);font-weight:600;cursor:pointer">Back to sign in</span>`;
+    back.querySelector('span').onclick = () => { S.authMode = 'login'; S.msg = ''; render(); };
+    card.appendChild(back);
+
+    el.appendChild(card);
+    return;
+  }
+
+  // ── Reset mode: new password + confirm ──
+  if (mode === 'reset') {
+    const pw1 = document.createElement('input');
+    pw1.type = 'password'; pw1.placeholder = 'New password (8+ characters)';
+    pw1.autocomplete = 'new-password'; pw1.style.cssText = inpCss;
+    card.appendChild(pw1);
+
+    const pw2 = document.createElement('input');
+    pw2.type = 'password'; pw2.placeholder = 'Confirm new password';
+    pw2.autocomplete = 'new-password'; pw2.style.cssText = inpCss;
+    card.appendChild(pw2);
+
+    const submit = document.createElement('button');
+    submit.className = 'btn btn-primary btn-full';
+    submit.textContent = 'Set new password';
+    submit.onclick = async () => {
+      const a = pw1.value, b = pw2.value;
+      if (a.length < 8) { showMsg('Password must be at least 8 characters', 'warn'); return; }
+      if (a !== b) { showMsg("Passwords don't match", 'warn'); return; }
+      submit.disabled = true; submit.textContent = 'Saving…';
+      try {
+        const resp = await API.req('POST', '/api/auth/reset', { token: S.resetToken, password: a });
+        S.resetToken = '';
+        await onAuthSuccess(resp, false);
+        showMsg('Password updated — you’re signed in.', 'ok');
+      } catch(e) {
+        showMsg(e.message || 'Could not reset password', 'err');
+        submit.disabled = false; submit.textContent = 'Set new password';
+      }
+    };
+    pw2.onkeydown = e => { if (e.key === 'Enter') submit.click(); };
+    card.appendChild(submit);
+
+    const back = document.createElement('div');
+    back.style.cssText = 'text-align:center;font-size:14px;margin-top:18px;';
+    back.innerHTML = `<span style="color:var(--accent);font-weight:600;cursor:pointer">Back to sign in</span>`;
+    back.querySelector('span').onclick = () => { S.authMode = 'login'; S.msg = ''; render(); };
+    card.appendChild(back);
+
+    el.appendChild(card);
+    return;
+  }
+
+  // ── Login / signup mode ──
   const emailInp = document.createElement('input');
   emailInp.type = 'email'; emailInp.placeholder = 'Email';
   emailInp.autocomplete = 'email';
-  emailInp.style.cssText = 'border:1.5px solid var(--sep);border-radius:10px;padding:12px 14px;font-size:16px;margin-bottom:10px;';
+  emailInp.style.cssText = inpCss.replace('margin-bottom:12px', 'margin-bottom:10px');
   card.appendChild(emailInp);
 
   const pwInp = document.createElement('input');
   pwInp.type = 'password';
   pwInp.placeholder = mode === 'login' ? 'Password' : 'Password (8+ characters)';
   pwInp.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
-  pwInp.style.cssText = 'border:1.5px solid var(--sep);border-radius:10px;padding:12px 14px;font-size:16px;margin-bottom:14px;';
+  pwInp.style.cssText = inpCss.replace('margin-bottom:12px', 'margin-bottom:14px');
   card.appendChild(pwInp);
 
   const submit = document.createElement('button');
@@ -1171,6 +1263,15 @@ function renderAuthScreen() {
   };
   pwInp.onkeydown = e => { if (e.key === 'Enter') submit.click(); };
   card.appendChild(submit);
+
+  // "Forgot password?" — login mode only
+  if (mode === 'login') {
+    const forgot = document.createElement('div');
+    forgot.style.cssText = 'text-align:center;font-size:13px;margin-top:12px;';
+    forgot.innerHTML = `<span style="color:var(--accent);cursor:pointer">Forgot password?</span>`;
+    forgot.querySelector('span').onclick = () => { S.authMode = 'forgot'; S.msg = ''; render(); };
+    card.appendChild(forgot);
+  }
 
   // Social sign-in (only shown when configured on the server)
   if (AUTH.google || AUTH.apple) {
@@ -2058,6 +2159,18 @@ async function init() {
 
   // Find out which social sign-in buttons to show.
   await loadAuthConfig();
+
+  // Password-reset link: ?reset=<token>. Show the reset screen and strip the
+  // token from the address bar so it isn't left in history.
+  const params = new URLSearchParams(location.search);
+  const resetTok = params.get('reset');
+  if (resetTok) {
+    history.replaceState({}, document.title, location.pathname);
+    S.resetToken = resetTok;
+    S.authMode = 'reset';
+    render();
+    return;
+  }
 
   // If we have a saved token, try to load the account's data. A 401 means
   // the token is stale — fall through to the sign-in screen.
