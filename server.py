@@ -108,7 +108,11 @@ _reset_token_signer = _URLSerializer(_AUTH_SECRET, salt='rsc-pw-reset')
 # is configured; until then /api/auth/forgot still returns a generic success
 # (so it never reveals whether an email is registered).
 _RESEND_API_KEY = (os.environ.get('RESEND_API_KEY') or '').strip()
-_MAIL_FROM = (os.environ.get('MAIL_FROM') or 'Room Score Tracker <noreply@room-score-tracker.com>').strip()
+# Use a real, friendly mailbox rather than "no-reply" — no-reply From
+# addresses measurably hurt deliverability (Gmail/Resend flag them) and block
+# legitimate replies. Per-message Reply-To (e.g. the inviting parent) is set by
+# callers where it makes sense.
+_MAIL_FROM = (os.environ.get('MAIL_FROM') or 'Room Score Tracker <hello@room-score-tracker.com>').strip()
 _APP_BASE_URL = (os.environ.get('APP_BASE_URL') or 'https://room-score-tracker.com').strip().rstrip('/')
 
 
