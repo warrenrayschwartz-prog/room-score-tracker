@@ -1075,10 +1075,35 @@ async function inviteCoParent() {
     render();
   } catch(e) { showMsg(e.message || 'Could not create an invite', 'err'); }
 }
-async function joinByCode(code) {
-  if (!code) { showMsg('Paste an invite code first', 'warn'); return; }
+// Send the invite to an email (server emails it) or phone (opens Messages).
+async function sendInviteTo(contact) {
+  contact = (contact || '').trim();
+  if (!contact) { showMsg('Enter an email or phone number', 'warn'); return; }
+  if (contact.includes('@')) {
+    try {
+      await API.req('POST', '/api/household/invite-email', { email: contact });
+      showMsg(`Invite emailed to ${contact}.`, 'ok');
+    } catch(e) { showMsg(e.message || 'Could not send the invite', 'err'); }
+    return;
+  }
+  // Phone number → open the device's Messages app pre-filled with the link.
+  const digits = contact.replace(/[^\d+]/g, '');
+  if (digits.replace(/\D/g, '').length < 7) { showMsg('That doesn’t look like a valid phone number', 'warn'); return; }
   try {
-    await API.req('POST', '/api/household/join', { code: code.trim() });
+    const r = await API.req('POST', '/api/household/invite');
+    const body = `Join me on Room Score Tracker so we both manage the kids' room scores: ${r.link}`;
+    const isApple = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
+    window.location.href = `sms:${digits}${isApple ? '&' : '?'}body=${encodeURIComponent(body)}`;
+  } catch(e) { showMsg(e.message || 'Could not create the invite', 'err'); }
+}
+async function joinByCode(raw) {
+  // Accept either a full invite link (…/?join=CODE) or a bare code.
+  raw = (raw || '').trim();
+  const m = raw.match(/[?&]join=([^&\s]+)/);
+  const code = m ? decodeURIComponent(m[1]) : raw;
+  if (!code) { showMsg('Paste the invite link first', 'warn'); return; }
+  try {
+    await API.req('POST', '/api/household/join', { code });
     await loadData();
     S.inviteLink = ''; S.tab = 'grade'; render();
     showMsg('You\'re now sharing this household.', 'ok');
@@ -2356,8 +2381,18 @@ function renderSetup(el) {
   const sText = document.createElement('div');
   sText.className = 'hint'; sText.style.padding = '0';
 
+  const subHead = (t) => {
+    const d = document.createElement('div');
+    d.style.cssText = 'font-size:12px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--text2);margin-top:6px;';
+    d.textContent = t; return d;
+  };
+  const hintLine = (t) => {
+    const d = document.createElement('div'); d.className = 'hint'; d.style.padding = '0'; d.textContent = t; return d;
+  };
+  const fieldCss = 'flex:1;min-width:0;background:transparent;color:var(--text);border:1.5px solid var(--sep);border-radius:10px;padding:10px 12px;font-size:15px;';
+
   if (h.role === 'member') {
-    sText.textContent = `You're sharing ${h.ownerEmail || 'another parent'}'s children — changes you make are shared with them.`;
+    sText.textContent = `You're sharing ${h.ownerEmail || 'another parent'}'s children — anything you change is shared with them.`;
     sBody.appendChild(sText);
     const leave = document.createElement('button');
     leave.className = 'btn btn-ghost'; leave.style.alignSelf = 'flex-start';
@@ -2365,17 +2400,16 @@ function renderSetup(el) {
     leave.onclick = () => leaveHousehold();
     sBody.appendChild(leave);
   } else {
-    sText.textContent = h.role === 'owner'
-      ? 'The other parent below shares these children with you.'
-      : 'Invite the other parent so you both manage the same children from your own accounts.';
-    sBody.appendChild(sText);
+    // ── Invite the other parent (you send) ──
+    sBody.appendChild(subHead(h.members.length ? 'Invite another parent' : 'Invite the other parent'));
+    sBody.appendChild(hintLine('Enter their email or phone number — we’ll send them an invite to join. No copying needed.'));
 
     if (h.role === 'owner' && h.members.length) {
       h.members.forEach(email => {
         const row = document.createElement('div');
         row.style.cssText = 'display:flex;align-items:center;gap:8px;';
         const em = document.createElement('span');
-        em.style.cssText = 'flex:1;font-size:15px;'; em.textContent = email;
+        em.style.cssText = 'flex:1;font-size:15px;'; em.textContent = '✓ ' + email;
         const rm = document.createElement('button');
         rm.className = 'btn btn-ghost btn-sm'; rm.style.color = 'var(--err)';
         rm.textContent = 'Remove';
@@ -2385,46 +2419,66 @@ function renderSetup(el) {
       });
     }
 
-    const inviteBtn = document.createElement('button');
-    inviteBtn.className = 'btn btn-ghost'; inviteBtn.style.alignSelf = 'flex-start';
-    inviteBtn.textContent = h.members && h.members.length ? 'Invite another co-parent' : 'Invite a co-parent';
-    inviteBtn.onclick = inviteCoParent;
-    sBody.appendChild(inviteBtn);
+    const sendRow = document.createElement('div');
+    sendRow.style.cssText = 'display:flex;gap:8px;align-items:center;';
+    const contactInp = document.createElement('input');
+    contactInp.type = 'text'; contactInp.placeholder = 'Email or phone number';
+    contactInp.style.cssText = fieldCss;
+    const sendBtn = document.createElement('button');
+    sendBtn.className = 'btn btn-primary btn-sm'; sendBtn.style.flexShrink = '0';
+    sendBtn.textContent = 'Send invite';
+    sendBtn.onclick = async () => {
+      const v = contactInp.value;
+      sendBtn.disabled = true; sendBtn.textContent = 'Sending…';
+      await sendInviteTo(v);
+      sendBtn.disabled = false; sendBtn.textContent = 'Send invite';
+      if (v.includes('@')) contactInp.value = '';
+    };
+    contactInp.onkeydown = e => { if (e.key === 'Enter') sendBtn.click(); };
+    sendRow.appendChild(contactInp); sendRow.appendChild(sendBtn);
+    sBody.appendChild(sendRow);
 
+    // Optional copy-a-link fallback
     if (S.inviteLink) {
       const linkRow = document.createElement('div');
       linkRow.style.cssText = 'display:flex;gap:8px;align-items:center;';
       const linkInp = document.createElement('input');
       linkInp.type = 'text'; linkInp.readOnly = true; linkInp.value = S.inviteLink;
-      linkInp.style.cssText = 'flex:1;background:transparent;color:var(--text);border:1.5px solid var(--sep);border-radius:10px;padding:9px 12px;font-size:13px;';
+      linkInp.style.cssText = fieldCss + 'font-size:13px;';
       linkInp.onclick = () => linkInp.select();
       const copy = document.createElement('button');
-      copy.className = 'btn btn-primary btn-sm'; copy.textContent = 'Copy';
+      copy.className = 'btn btn-ghost btn-sm'; copy.style.flexShrink = '0'; copy.textContent = 'Copy';
       copy.onclick = () => {
         linkInp.select();
         (navigator.clipboard ? navigator.clipboard.writeText(S.inviteLink) : Promise.reject())
-          .then(() => showMsg('Invite link copied — text it to the other parent.', 'ok'))
+          .then(() => showMsg('Invite link copied.', 'ok'))
           .catch(() => { try { document.execCommand('copy'); showMsg('Invite link copied.', 'ok'); } catch(_) { showMsg('Select the link and copy it.', 'info'); } });
       };
       linkRow.appendChild(linkInp); linkRow.appendChild(copy);
       sBody.appendChild(linkRow);
-      const exp = document.createElement('div');
-      exp.className = 'hint'; exp.style.padding = '0';
-      exp.textContent = 'Send this link to the other parent. It works for 7 days; they sign in and tap to join.';
-      sBody.appendChild(exp);
+    } else {
+      const copyAlt = document.createElement('button');
+      copyAlt.style.cssText = 'background:none;border:none;color:var(--accent);font-size:13px;cursor:pointer;align-self:flex-start;font-family:inherit;padding:0;text-decoration:underline;';
+      copyAlt.textContent = 'or copy a link to send yourself';
+      copyAlt.onclick = inviteCoParent;
+      sBody.appendChild(copyAlt);
     }
 
+    // ── Were you invited? (you join) ── solo accounts only
     if (h.role === 'solo') {
-      const codeRow = document.createElement('div');
-      codeRow.style.cssText = 'display:flex;gap:8px;align-items:center;margin-top:2px;';
+      sBody.appendChild(subHead('Were you invited?'));
+      sBody.appendChild(hintLine('Paste the invite link the other parent sent you.'));
+      const joinRow = document.createElement('div');
+      joinRow.style.cssText = 'display:flex;gap:8px;align-items:center;';
       const codeInp = document.createElement('input');
-      codeInp.type = 'text'; codeInp.placeholder = 'Have an invite code? Paste it';
-      codeInp.style.cssText = 'flex:1;background:transparent;color:var(--text);border:1.5px solid var(--sep);border-radius:10px;padding:9px 12px;font-size:14px;';
+      codeInp.type = 'text'; codeInp.placeholder = 'Paste invite link';
+      codeInp.style.cssText = fieldCss + 'font-size:14px;';
       const joinBtn = document.createElement('button');
-      joinBtn.className = 'btn btn-ghost btn-sm'; joinBtn.textContent = 'Join';
+      joinBtn.className = 'btn btn-ghost btn-sm'; joinBtn.style.flexShrink = '0'; joinBtn.textContent = 'Join';
       joinBtn.onclick = () => joinByCode(codeInp.value);
-      codeRow.appendChild(codeInp); codeRow.appendChild(joinBtn);
-      sBody.appendChild(codeRow);
+      codeInp.onkeydown = e => { if (e.key === 'Enter') joinBtn.click(); };
+      joinRow.appendChild(codeInp); joinRow.appendChild(joinBtn);
+      sBody.appendChild(joinRow);
     }
   }
   shareCard.appendChild(sBody);

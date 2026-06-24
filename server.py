@@ -845,6 +845,37 @@ def household_invite():
     return jsonify({'code': code, 'link': f'{_APP_BASE_URL}/?join={code}'})
 
 
+@app.route('/api/household/invite-email', methods=['POST'])
+@limiter.limit('15 per hour')
+@_require_user
+def household_invite_email():
+    """Email a co-parent invite directly to the given address."""
+    if not _RESEND_API_KEY:
+        return jsonify({'error': 'Email sending isn’t set up on this server.'}), 503
+    data = request.get_json(silent=True) or {}
+    to = _norm_email(data.get('email'))
+    if not to:
+        return jsonify({'error': 'Enter a valid email address.'}), 400
+    code = _invite_signer.dumps(str(g.owner_id))
+    link = f'{_APP_BASE_URL}/?join={code}'
+    inviter = (getattr(g.current_user, 'email', None) or 'A parent')
+    html = (
+        '<div style="font-family:-apple-system,Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;color:#111">'
+        '<h2 style="margin:0 0 12px">You\'re invited to co-parent</h2>'
+        f'<p style="font-size:15px;line-height:1.5;color:#333">{inviter} invited you to share children on '
+        '<strong>Room Score Tracker</strong> — you\'ll both manage the same kids\' room scores from your own accounts.</p>'
+        f'<p style="margin:22px 0"><a href="{link}" style="background:#1ed760;color:#06210f;text-decoration:none;'
+        'padding:12px 22px;border-radius:10px;font-weight:700;font-size:15px;display:inline-block">Join their household</a></p>'
+        '<p style="font-size:13px;color:#888;line-height:1.5">Sign in (or create a free account) and you\'ll be connected. '
+        f'This link expires in 7 days. Or paste this into your browser:<br><span style="color:#1aa34a;word-break:break-all">{link}</span></p>'
+        '</div>'
+    )
+    ok = _send_email(to, 'You\'re invited to co-parent on Room Score Tracker', html)
+    if not ok:
+        return jsonify({'error': 'Could not send the email. Try again.'}), 502
+    return jsonify({'ok': True})
+
+
 @app.route('/api/household/join', methods=['POST'])
 @limiter.limit('20 per hour')
 @_require_user
