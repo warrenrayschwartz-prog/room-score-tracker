@@ -529,6 +529,7 @@
   <div class="hdr-sub">photo-based allowance system</div>
 </div>
 
+<div id="ios-hint"></div>
 <div class="tabs" id="tabs"></div>
 <div class="page" id="page"></div>
 
@@ -1055,9 +1056,12 @@ async function onAuthSuccess(resp, isSignup) {
 
 // If the user arrived via a co-parent invite link, offer to join after sign-in.
 async function maybeProcessPendingJoin() {
-  if (!S.pendingJoin || !S.authed) return;
-  const code = S.pendingJoin; S.pendingJoin = '';
-  if (!confirm('Join a shared household? You\'ll see and manage the same children as the parent who invited you.')) return;
+  if (!S.authed) return;
+  let code = S.pendingJoin;
+  if (!code) { try { code = sessionStorage.getItem('rsc_join') || ''; } catch(_) {} }
+  if (!code) return;
+  S.pendingJoin = ''; try { sessionStorage.removeItem('rsc_join'); } catch(_) {}
+  if (!confirm('Join this household? You\'ll see and manage the same kids as the person who invited you.')) return;
   try {
     await API.req('POST', '/api/household/join', { code });
     await loadData();
@@ -1118,7 +1122,7 @@ async function leaveHousehold(memberEmail) {
     await API.req('POST', '/api/household/leave', memberEmail ? { memberEmail } : {});
     await loadData();
     render();
-    showMsg(memberEmail ? 'Co-parent removed.' : 'You left the household.', 'info');
+    showMsg(memberEmail ? 'Removed from your household.' : 'You left the household.', 'info');
   } catch(e) { showMsg(e.message || 'Could not update sharing', 'err'); }
 }
 
@@ -1595,6 +1599,7 @@ function render() {
   if (_rendering) return;
   _rendering = true;
   try {
+    renderIosInstallHint();
     const tabsEl = document.getElementById('tabs');
     if (!S.authed) {
       if (tabsEl) tabsEl.style.display = 'none';
@@ -1609,6 +1614,41 @@ function render() {
   } finally {
     _rendering = false;
   }
+}
+
+// Show a dismissible "Add to Home Screen" banner to iPhone/iPad visitors in
+// Safari who haven't installed the app yet. iOS gives no API to install a PWA
+// programmatically — the user must tap Share → Add to Home Screen — so the
+// best we can do (e.g. for someone arriving via a shared invite link) is guide
+// them clearly. Hidden once installed (display-mode: standalone) or dismissed.
+function renderIosInstallHint() {
+  const host = document.getElementById('ios-hint');
+  if (!host) return;
+  const ua = navigator.userAgent || '';
+  const isIos = /iPhone|iPad|iPod/.test(ua) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);  // iPadOS
+  const isSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
+  const installed = window.navigator.standalone === true ||
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  let dismissed = false;
+  try { dismissed = localStorage.getItem('rsc_ios_hint') === 'off'; } catch(_) {}
+  if (!isIos || !isSafari || installed || dismissed) { host.innerHTML = ''; return; }
+  if (host.dataset.built === '1') return;     // don't rebuild every render
+  host.dataset.built = '1';
+  const shareIcon = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M12 16V4"/><path d="M8 8l4-4 4 4"/><path d="M5 12v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>';
+  host.innerHTML =
+    '<div style="margin:10px 12px;padding:11px 13px;background:var(--card);border:1.5px solid var(--accent);' +
+    'border-radius:12px;display:flex;gap:10px;align-items:flex-start;font-size:13.5px;line-height:1.45;color:var(--text)">' +
+    '<div style="flex:1">Add <strong>Room Score Tracker</strong> to your Home Screen: tap the Share ' +
+    shareIcon + ' button below, then <strong>“Add to Home Screen.”</strong></div>' +
+    '<button id="ios-hint-x" aria-label="Dismiss" style="flex-shrink:0;background:none;border:none;' +
+    'color:var(--text2);font-size:20px;line-height:1;cursor:pointer;padding:0 2px;font-family:inherit">×</button>' +
+    '</div>';
+  const x = document.getElementById('ios-hint-x');
+  if (x) x.onclick = () => {
+    try { localStorage.setItem('rsc_ios_hint', 'off'); } catch(_) {}
+    host.innerHTML = ''; host.dataset.built = '';
+  };
 }
 
 // Show a "Sign out" button in the header only when signed in.
@@ -2451,8 +2491,8 @@ function renderSetup(el) {
     el.appendChild(remCard);
   }
 
-  // ── Co-parents (sharing) ──
-  const shareCard = mkCard('Co-parents');
+  // ── Household sharing ──
+  const shareCard = mkCard('Household');
   const h = S.household || { role: 'solo', members: [] };
   const sBody = document.createElement('div');
   sBody.style.cssText = 'padding:4px 16px 14px;display:flex;flex-direction:column;gap:10px;';
@@ -2471,7 +2511,7 @@ function renderSetup(el) {
   const fieldCss = 'flex:1;min-width:0;background:transparent;color:var(--text);border:1.5px solid var(--sep);border-radius:10px;padding:10px 12px;font-size:15px;';
 
   if (h.role === 'member') {
-    sText.textContent = `You're sharing ${h.ownerEmail || 'another parent'}'s children — anything you change is shared with them.`;
+    sText.textContent = `You're part of ${h.ownerEmail || 'someone'}'s household — you see and manage the same kids, and anything you change is shared with everyone in it.`;
     sBody.appendChild(sText);
     const leave = document.createElement('button');
     leave.className = 'btn btn-ghost'; leave.style.alignSelf = 'flex-start';
@@ -2479,9 +2519,9 @@ function renderSetup(el) {
     leave.onclick = () => leaveHousehold();
     sBody.appendChild(leave);
   } else {
-    // ── Invite the other parent (you send) ──
-    sBody.appendChild(subHead(h.members.length ? 'Invite another parent' : 'Invite the other parent'));
-    sBody.appendChild(hintLine('Enter their email or phone number — we’ll send them an invite to join. No copying needed.'));
+    // ── Invite someone to this household (you send) ──
+    sBody.appendChild(subHead(h.members.length ? 'Invite someone else' : 'Invite someone to this household'));
+    sBody.appendChild(hintLine('Invite someone else in your household so they can access Room Score Tracker for these kids. Enter their email or phone number and we’ll send the invite — they just tap the link to join. No copying needed.'));
 
     if (h.role === 'owner' && h.members.length) {
       h.members.forEach(email => {
@@ -2543,22 +2583,9 @@ function renderSetup(el) {
       sBody.appendChild(copyAlt);
     }
 
-    // ── Were you invited? (you join) ── solo accounts only
-    if (h.role === 'solo') {
-      sBody.appendChild(subHead('Were you invited?'));
-      sBody.appendChild(hintLine('Paste the invite link the other parent sent you.'));
-      const joinRow = document.createElement('div');
-      joinRow.style.cssText = 'display:flex;gap:8px;align-items:center;';
-      const codeInp = document.createElement('input');
-      codeInp.type = 'text'; codeInp.placeholder = 'Paste invite link';
-      codeInp.style.cssText = fieldCss + 'font-size:14px;';
-      const joinBtn = document.createElement('button');
-      joinBtn.className = 'btn btn-ghost btn-sm'; joinBtn.style.flexShrink = '0'; joinBtn.textContent = 'Join';
-      joinBtn.onclick = () => joinByCode(codeInp.value);
-      codeInp.onkeydown = e => { if (e.key === 'Enter') joinBtn.click(); };
-      joinRow.appendChild(codeInp); joinRow.appendChild(joinBtn);
-      sBody.appendChild(joinRow);
-    }
+    // Note: no manual "paste invite link" box — the invite link auto-joins
+    // after the recipient signs in (see maybeProcessPendingJoin), so it does
+    // everything on its own.
   }
   shareCard.appendChild(sBody);
   el.appendChild(shareCard);
@@ -3194,6 +3221,9 @@ async function init() {
   const joinCode = params.get('join');
   if (joinCode) {
     S.pendingJoin = joinCode;
+    // Persist so the invite survives the sign-up/redirect round-trip; consumed
+    // and cleared by maybeProcessPendingJoin once the recipient is signed in.
+    try { sessionStorage.setItem('rsc_join', joinCode); } catch(_) {}
     history.replaceState({}, document.title, location.pathname);
   }
 
