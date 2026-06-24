@@ -169,13 +169,18 @@ def _send_push(sess, sub, payload):
         return False
 
 
+_LAST_EMAIL_ERROR = ''   # DEBUG: last Resend failure detail (temporary)
+
+
 def _send_email(to, subject, html, text=None, reply_to=None):
     """Send one email via Resend. Returns True on success. Never raises.
 
     Including a plain-text alternative (`text`) and a real `reply_to` markedly
     improves inbox placement — HTML-only mail from a young sending domain is a
     prime spam-filter target."""
+    global _LAST_EMAIL_ERROR
     if not _RESEND_API_KEY:
+        _LAST_EMAIL_ERROR = 'RESEND_API_KEY not set'
         app.logger.error('RESEND_API_KEY not set — cannot send email to %s', to)
         return False
     try:
@@ -195,11 +200,14 @@ def _send_email(to, subject, html, text=None, reply_to=None):
             timeout=10,
         )
         if r.status_code not in (200, 201):
+            _LAST_EMAIL_ERROR = f'{r.status_code}: {r.text[:300]}'
             app.logger.error('Resend send failed (%s): %s', r.status_code, r.text[:200])
             return False
+        _LAST_EMAIL_ERROR = ''
         app.logger.info('Resend accepted email to %s (subject=%r)', to, subject)
         return True
     except Exception as e:
+        _LAST_EMAIL_ERROR = f'exception: {e}'
         app.logger.exception('send email failed: %s', e)
         return False
 
@@ -892,7 +900,7 @@ def household_invite_email():
         html, text=text, reply_to=reply_to,
     )
     if not ok:
-        return jsonify({'error': 'Could not send the email. Try again.'}), 502
+        return jsonify({'error': 'Could not send the email. Try again.', 'detail': _LAST_EMAIL_ERROR}), 502
     return jsonify({'ok': True})
 
 
