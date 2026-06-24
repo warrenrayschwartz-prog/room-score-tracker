@@ -117,6 +117,11 @@ class User(Base):
     household_owner_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True), nullable=True, index=True
     )
+    # Per-user reminder schedule as JSON: {"tz": "<IANA>", "days": {"Mon":
+    # "18:00", ... or null}}. reminder_last_slot dedupes a fired slot
+    # ("YYYY-MM-DD|HH:MM") so a frequent cron doesn't double-send.
+    reminder: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reminder_last_slot: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     state: Mapped['AppState | None'] = relationship(
         'AppState', back_populates='user', cascade='all, delete-orphan',
@@ -227,13 +232,16 @@ def init_db() -> None:
     # Additive migration for the sharing column on already-created tables.
     # Postgres supports ADD COLUMN IF NOT EXISTS; on SQLite (fresh dev DB) the
     # column already exists from create_all, so this errors and is ignored.
-    try:
-        with engine.begin() as conn:
-            conn.execute(text(
-                'ALTER TABLE users ADD COLUMN IF NOT EXISTS household_owner_id UUID'
-            ))
-    except Exception:  # noqa: BLE001
-        pass
+    for _ddl in (
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS household_owner_id UUID',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS reminder TEXT',
+        'ALTER TABLE users ADD COLUMN IF NOT EXISTS reminder_last_slot TEXT',
+    ):
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(_ddl))
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def get_session():

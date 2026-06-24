@@ -774,8 +774,10 @@ async function enableReminders() {
       applicationServerKey: _urlB64ToU8(PUSH.publicKey),
     });
     await API.req('POST', '/api/push/subscribe', sub.toJSON ? sub.toJSON() : sub);
-    S.pushOn = true; render();
-    showMsg('Daily reminders are on for this device.', 'ok');
+    S.pushOn = true;
+    if (!S.reminderSched) { S.reminderSched = defaultSchedule(); saveSchedule(); }
+    render();
+    showMsg('Reminders on. Pick the days and times below.', 'ok');
   } catch(e) { showMsg(e.message || 'Could not enable reminders', 'err'); }
 }
 async function disableReminders() {
@@ -795,6 +797,91 @@ async function sendTestReminder() {
     const r = await API.req('POST', '/api/push/test');
     showMsg(r.sent ? 'Test reminder sent — check your notifications.' : 'No active device to notify.', r.sent ? 'ok' : 'warn');
   } catch(e) { showMsg(e.message || 'Could not send test', 'err'); }
+}
+
+// ── Per-day reminder schedule {tz, days:{Mon..Sun:'HH:MM'|null}} ──
+function _browserTz() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch(_) { return 'UTC'; }
+}
+function defaultSchedule() {
+  const days = {}; DAYS.forEach(d => days[d] = '18:00');
+  return { tz: _browserTz(), days };
+}
+async function loadSchedule() {
+  try { const r = await API.req('GET', '/api/push/schedule'); S.reminderSched = r.schedule || null; }
+  catch(_) { S.reminderSched = null; }
+  render();
+}
+let _schedTimer = null;
+function saveSchedule() {
+  if (!S.reminderSched) return;
+  S.reminderSched.tz = _browserTz();   // keep timezone current to this device
+  if (_schedTimer) clearTimeout(_schedTimer);
+  _schedTimer = setTimeout(() => {
+    API.req('PUT', '/api/push/schedule', S.reminderSched)
+      .catch(() => showMsg('Could not save reminder times — check your connection', 'err'));
+  }, 500);
+}
+function _timeCss() {
+  return 'background:transparent;color:var(--text);border:1.5px solid var(--sep);border-radius:9px;padding:7px 10px;font-size:15px;font-family:inherit;';
+}
+function _fmtTime(t) {
+  try { const [h, m] = t.split(':').map(Number); const ap = h >= 12 ? 'PM' : 'AM'; const hh = ((h + 11) % 12) + 1; return `${hh}:${String(m).padStart(2, '0')} ${ap}`; }
+  catch(_) { return t; }
+}
+// Per-day reminder time editor (Mon..Sun) with a "copy to all days" control.
+function renderScheduleEditor() {
+  const sched = S.reminderSched;
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'margin-top:8px;border-top:0.5px solid var(--sep);padding-top:12px;';
+
+  const lbl = document.createElement('div');
+  lbl.className = 'hint'; lbl.style.padding = '0 0 10px';
+  lbl.textContent = 'Pick a time for each day (your local time). Turn a day off with its button.';
+  wrap.appendChild(lbl);
+
+  // Apply-to-all-days row
+  const allRow = document.createElement('div');
+  allRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;';
+  const allLab = document.createElement('span');
+  allLab.style.cssText = 'font-size:13px;color:var(--muted);'; allLab.textContent = 'Same time every day:';
+  const allTime = document.createElement('input');
+  allTime.type = 'time';
+  allTime.value = DAYS.map(d => sched.days[d]).find(Boolean) || '18:00';
+  allTime.style.cssText = _timeCss();
+  const applyBtn = document.createElement('button');
+  applyBtn.className = 'btn btn-ghost btn-sm'; applyBtn.textContent = 'Apply to all days';
+  applyBtn.onclick = () => {
+    const t = allTime.value || '18:00';
+    DAYS.forEach(d => sched.days[d] = t);
+    saveSchedule(); render();
+    showMsg('Every day set to ' + _fmtTime(t), 'ok');
+  };
+  allRow.appendChild(allLab); allRow.appendChild(allTime); allRow.appendChild(applyBtn);
+  wrap.appendChild(allRow);
+
+  // Per-day rows
+  DAYS.forEach(d => {
+    const on = !!sched.days[d];
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:6px 0;';
+    const tog = document.createElement('button');
+    tog.textContent = d;
+    tog.style.cssText = `width:56px;flex-shrink:0;padding:9px 0;border-radius:9px;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;${on ? 'background:var(--accent);color:#fff' : 'background:var(--bg);color:var(--muted)'}`;
+    const timeInp = document.createElement('input');
+    timeInp.type = 'time';
+    timeInp.value = sched.days[d] || '18:00';
+    timeInp.disabled = !on;
+    timeInp.style.cssText = _timeCss() + (on ? '' : 'opacity:.4;');
+    timeInp.onchange = () => { sched.days[d] = timeInp.value || '18:00'; saveSchedule(); };
+    tog.onclick = () => { sched.days[d] = on ? null : (timeInp.value || '18:00'); saveSchedule(); render(); };
+    const tag = document.createElement('span');
+    tag.style.cssText = 'font-size:13px;color:var(--muted);margin-left:auto;';
+    tag.textContent = on ? '' : 'Off';
+    row.appendChild(tog); row.appendChild(timeInp); row.appendChild(tag);
+    wrap.appendChild(row);
+  });
+  return wrap;
 }
 
 // ─── Server-backed photo storage (kind='photo', key=`${boy}|${day}`) ──────────
@@ -1017,6 +1104,7 @@ function logout() {
   S.authed = false; S.account = null;
   S.children = []; S.scores = {}; S.baselines = {}; S.savedPhotos = {};
   S.boy = ''; S.result = null; S.regrade = false; S.photos = {}; S.thumbs = {};
+  S.reminderSched = undefined;   // reload per-user schedule on next sign-in
   S.msg = '';
   render();
 }
@@ -2244,6 +2332,16 @@ function renderSetup(el) {
         row.appendChild(test);
       }
       rBody.appendChild(row);
+
+      // Per-day time editor (loads the schedule once, then shows the picker).
+      if (S.pushOn) {
+        if (S.reminderSched === undefined) {
+          setTimeout(loadSchedule, 0);   // deferred to avoid re-entrant render
+        } else {
+          if (!S.reminderSched) S.reminderSched = defaultSchedule();
+          rBody.appendChild(renderScheduleEditor());
+        }
+      }
     }
     remCard.appendChild(rBody);
     el.appendChild(remCard);

@@ -16,3 +16,6 @@ requests>=2.31,<3
 # Web Push reminders (bundles py-vapid + cryptography). Optional at runtime;
 # push endpoints return 503 until VAPID keys are configured.
 pywebpush>=2,<3
+# Timezone database for zoneinfo (per-user reminder schedules), in case the
+# host image lacks the system tzdata.
+tzdata>=2024.1

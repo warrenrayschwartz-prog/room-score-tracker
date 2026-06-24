@@ -959,25 +959,112 @@ def push_test():
     return jsonify({'ok': True, 'sent': sent})
 
 
+_DAY_KEYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+
+def _clean_schedule(data):
+    """Validate a {tz, days{Mon..Sun: 'HH:MM'|null}} schedule."""
+    import re as _re
+    tz = (str(data.get('tz') or 'UTC').strip() or 'UTC')[:64]
+    days_in = data.get('days') or {}
+    days = {}
+    for d in _DAY_KEYS:
+        v = days_in.get(d)
+        ok = isinstance(v, str) and _re.match(r'^\d{2}:\d{2}$', v)
+        if ok and 0 <= int(v[:2]) < 24 and 0 <= int(v[3:]) < 60:
+            days[d] = f'{int(v[:2]):02d}:{int(v[3:]):02d}'
+        else:
+            days[d] = None
+    return {'tz': tz, 'days': days}
+
+
+@app.route('/api/push/schedule')
+@_require_user
+def push_get_schedule():
+    import json as _json
+    u = g.current_user
+    sched = None
+    if u.reminder:
+        try:
+            sched = _json.loads(u.reminder)
+        except Exception:
+            sched = None
+    return jsonify({'schedule': sched})
+
+
+@app.route('/api/push/schedule', methods=['PUT'])
+@_require_user
+def push_put_schedule():
+    import json as _json
+    sess = g.db
+    u = g.current_user
+    sched = _clean_schedule(request.get_json(silent=True) or {})
+    u.reminder = _json.dumps(sched)
+    sess.commit()
+    return jsonify({'ok': True, 'schedule': sched})
+
+
 @app.route('/api/cron/reminders', methods=['POST', 'GET'])
 def cron_reminders():
-    """Send the daily 'grade today's rooms' reminder to every subscriber.
-    Protected by the CRON_KEY header so only the scheduler can trigger it."""
+    """Send the 'grade today's rooms' reminder to each user whose per-day
+    schedule is due right now (in their own timezone). Run this frequently
+    (every ~15 min). Protected by the CRON_KEY header."""
     if not _CRON_KEY or request.headers.get('X-Cron-Key', '') != _CRON_KEY:
         return jsonify({'error': 'Forbidden'}), 403
     if not _push_enabled():
         return jsonify({'error': 'Push not configured'}), 503
+    import json as _json
+    from datetime import datetime
+    try:
+        from zoneinfo import ZoneInfo
+    except Exception:
+        ZoneInfo = None
+    try:
+        window = max(1, min(120, int(request.args.get('window', '20'))))
+    except Exception:
+        window = 20
+
     sess = SessionLocal()
-    subs = sess.query(PushSub).all()
     sent = 0
-    for s in subs:
-        if _send_push(sess, s, {
-            'title': 'Room Score Tracker',
-            'body': "Time to grade today's rooms 📷",
-            'url': '/',
-        }):
-            sent += 1
-    return jsonify({'ok': True, 'subscribers': len(subs), 'sent': sent})
+    due_users = 0
+    for u in sess.query(User).filter(User.reminder.isnot(None)).all():
+        try:
+            sched = _json.loads(u.reminder) if u.reminder else None
+        except Exception:
+            sched = None
+        if not sched:
+            continue
+        tz = None
+        if ZoneInfo:
+            try:
+                tz = ZoneInfo(sched.get('tz') or 'UTC')
+            except Exception:
+                tz = None
+        now_local = datetime.now(tz) if tz else datetime.utcnow()
+        t = (sched.get('days') or {}).get(_DAY_KEYS[now_local.weekday()])
+        if not t:
+            continue
+        scheduled = now_local.replace(hour=int(t[:2]), minute=int(t[3:]), second=0, microsecond=0)
+        delta_min = (now_local - scheduled).total_seconds() / 60.0
+        if not (0 <= delta_min < window):
+            continue
+        slot = now_local.strftime('%Y-%m-%d') + '|' + t
+        if u.reminder_last_slot == slot:
+            continue
+        subs = sess.query(PushSub).filter(PushSub.user_id == u.id).all()
+        if not subs:
+            continue
+        for s in subs:
+            if _send_push(sess, s, {
+                'title': 'Room Score Tracker',
+                'body': "Time to grade today's rooms 📷",
+                'url': '/',
+            }):
+                sent += 1
+        u.reminder_last_slot = slot
+        due_users += 1
+    sess.commit()
+    return jsonify({'ok': True, 'dueUsers': due_users, 'sent': sent})
 
 
 # ── Grading (auth required) ─────────────────────────────────────────────────────
