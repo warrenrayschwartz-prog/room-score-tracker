@@ -1475,18 +1475,56 @@ function autoSave() {
 }
 
 // ─── Backup / Restore ────────────────────────────────────────────────────────
-function backupBaselines() {
-  const json = JSON.stringify(S.baselines, null, 2);
+// A backup is a single JSON file holding EVERYTHING: children, scores,
+// settings, room setup, all baseline + daily photos, the reminder schedule,
+// and co-parent info. Format version 3. Older files (a bare baselines map, or
+// v-less objects) still restore via the fallbacks in restoreBackup().
+function _triggerDownload(json, filename) {
   const blob = new Blob([json], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'room-baselines.json';
+  a.href = url; a.download = filename;
   a.style.display = 'none';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showMsg('Baselines downloaded', 'ok');
 }
-function restoreBaselines() {
+async function backupBaselines() {     // name kept; now a full-account backup
+  showMsg('Preparing backup…', 'ok');
+  // Pull every saved daily-photo bundle (they're lazy-loaded, so most aren't
+  // in memory yet) for each child/day that has a score.
+  const photos = {};
+  for (const child of (S.children || [])) {
+    const name = child.name;
+    const days = Object.keys((S.scores && S.scores[name]) || {});
+    if (!days.length) continue;
+    photos[name] = {};
+    for (const day of days) {
+      try {
+        const d = await API.req('GET', '/api/photo?key=' + encodeURIComponent(name + '|' + day));
+        if (d && d.data && Object.keys(d.data).length) photos[name][day] = d.data;
+      } catch(_) { /* skip a day that fails to load */ }
+    }
+  }
+  const backup = {
+    app: 'room-score-tracker',
+    version: 3,
+    exportedAt: new Date().toISOString(),
+    // Account + co-parent info is informational (relationships can't be
+    // recreated from a file), but it documents what the backup belongs to.
+    account: S.account || null,
+    household: S.household || null,
+    reminder: S.reminderSched || null,
+    settings: { difficulty: S.difficulty, maxAllowance: S.maxAllowance },
+    children: S.children || [],
+    rooms: S.rooms || [],
+    scores: S.scores || {},
+    baselines: S.baselines || {},
+    photos,
+  };
+  _triggerDownload(JSON.stringify(backup, null, 2), 'room-score-tracker-backup.json');
+  showMsg('Backup downloaded', 'ok');
+}
+function restoreBaselines() {           // name kept; now restores a full backup
   const inp = document.createElement('input');
   inp.type = 'file'; inp.accept = '.json,application/json';
   inp.style.cssText = 'position:absolute;width:0;height:0;opacity:0;overflow:hidden;pointer-events:none';
@@ -1497,11 +1535,52 @@ function restoreBaselines() {
     try {
       const parsed = JSON.parse(await file.text());
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        throw new Error('That file is not a valid baselines backup.');
+        throw new Error('That file is not a valid backup.');
       }
-      S.baselines = parsed;
-      saveBaselines();   // bulk replace is correct here (full restore)
-      showMsg('Baselines restored!', 'ok');
+      const isFull = parsed.app === 'room-score-tracker' || parsed.children || parsed.scores || parsed.settings;
+      if (!isFull) {
+        // Legacy file: a bare { slotKey: dataUrl } baselines map.
+        if (!confirm('This looks like a baselines-only backup. Replace your current baselines?')) return;
+        S.baselines = parsed;
+        saveBaselines();
+        showMsg('Baselines restored!', 'ok');
+        render();
+        return;
+      }
+      if (!confirm('Restore this full backup? It will replace your current children, scores, rooms, settings, baselines, and photos.')) return;
+      // Core state.
+      if (Array.isArray(parsed.children)) S.children = parsed.children;
+      if (Array.isArray(parsed.rooms))    S.rooms    = parsed.rooms;
+      if (parsed.scores && typeof parsed.scores === 'object') S.scores = parsed.scores;
+      if (parsed.settings) {
+        if (typeof parsed.settings.difficulty === 'number')   S.difficulty   = parsed.settings.difficulty;
+        if (typeof parsed.settings.maxAllowance === 'number') S.maxAllowance = parsed.settings.maxAllowance;
+      }
+      if (S.children.length && !S.children.some(c => c.name === S.boy)) S.boy = S.children[0].name;
+      saveState();
+      // Baselines (bulk replace).
+      if (parsed.baselines && typeof parsed.baselines === 'object') {
+        S.baselines = parsed.baselines;
+        saveBaselines();
+      }
+      // Daily photos: write each child/day bundle back and seed the cache.
+      S.savedPhotos = {};
+      if (parsed.photos && typeof parsed.photos === 'object') {
+        for (const [name, days] of Object.entries(parsed.photos)) {
+          if (!days || typeof days !== 'object') continue;
+          S.savedPhotos[name] = {};
+          for (const [day, bundle] of Object.entries(days)) {
+            S.savedPhotos[name][day] = bundle || {};
+            try { await _putPhoto(name, day, bundle || {}); } catch(_) {}
+          }
+        }
+      }
+      // Reminder schedule (best-effort; push may be off on this device).
+      if (parsed.reminder && typeof parsed.reminder === 'object') {
+        S.reminderSched = parsed.reminder;
+        try { saveSchedule(); } catch(_) {}
+      }
+      showMsg('Backup restored!', 'ok');
       render();
     } catch(e) { showMsg('Restore failed: ' + e.message, 'err'); }
   };
@@ -2308,16 +2387,16 @@ function renderSetup(el) {
   const bRow = document.createElement('div');
   bRow.className = 'row wrap'; bRow.style.padding = '4px 16px 12px'; bRow.style.gap = '10px';
   const bBtn = document.createElement('button');
-  bBtn.className = 'btn btn-ghost'; bBtn.textContent = 'Download Baselines';
+  bBtn.className = 'btn btn-ghost'; bBtn.textContent = 'Download Backup';
   bBtn.onclick = backupBaselines;
   const rBtn = document.createElement('button');
-  rBtn.className = 'btn btn-ghost'; rBtn.textContent = 'Restore Baselines';
+  rBtn.className = 'btn btn-ghost'; rBtn.textContent = 'Restore Backup';
   rBtn.onclick = restoreBaselines;
   bRow.appendChild(bBtn); bRow.appendChild(rBtn);
   bCard.appendChild(bRow);
   const hint2 = document.createElement('div');
   hint2.className = 'hint';
-  hint2.textContent = 'Download after uploading baselines — protects against Safari clearing local data.';
+  hint2.textContent = 'Saves everything to one file — baselines, photos, scores, rooms, settings, and reminder times. Keep a copy in case the browser clears local data.';
   bCard.appendChild(hint2);
   el.appendChild(bCard);
 
