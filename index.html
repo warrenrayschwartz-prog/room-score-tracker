@@ -1082,7 +1082,7 @@ async function sendInviteTo(contact) {
   if (contact.includes('@')) {
     try {
       await API.req('POST', '/api/household/invite-email', { email: contact });
-      showMsg(`Invite emailed to ${contact}.`, 'ok');
+      showMsg(`Invite sent to ${contact}. If it's not in their inbox in a minute, tell them to check Spam/Promotions.`, 'ok');
     } catch(e) { showMsg(e.message || 'Could not send the invite', 'err'); }
     return;
   }

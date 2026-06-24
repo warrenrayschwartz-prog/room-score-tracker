@@ -169,25 +169,35 @@ def _send_push(sess, sub, payload):
         return False
 
 
-def _send_email(to, subject, html):
-    """Send one email via Resend. Returns True on success. Never raises."""
+def _send_email(to, subject, html, text=None, reply_to=None):
+    """Send one email via Resend. Returns True on success. Never raises.
+
+    Including a plain-text alternative (`text`) and a real `reply_to` markedly
+    improves inbox placement — HTML-only mail from a young sending domain is a
+    prime spam-filter target."""
     if not _RESEND_API_KEY:
-        app.logger.error('RESEND_API_KEY not set — cannot send reset email to %s', to)
+        app.logger.error('RESEND_API_KEY not set — cannot send email to %s', to)
         return False
     try:
         import requests as _rq
+        payload = {'from': _MAIL_FROM, 'to': [to], 'subject': subject, 'html': html}
+        if text:
+            payload['text'] = text
+        if reply_to:
+            payload['reply_to'] = reply_to
         r = _rq.post(
             'https://api.resend.com/emails',
             headers={
                 'Authorization': f'Bearer {_RESEND_API_KEY}',
                 'content-type': 'application/json',
             },
-            json={'from': _MAIL_FROM, 'to': [to], 'subject': subject, 'html': html},
+            json=payload,
             timeout=10,
         )
         if r.status_code not in (200, 201):
             app.logger.error('Resend send failed (%s): %s', r.status_code, r.text[:200])
             return False
+        app.logger.info('Resend accepted email to %s (subject=%r)', to, subject)
         return True
     except Exception as e:
         app.logger.exception('send email failed: %s', e)
@@ -870,7 +880,17 @@ def household_invite_email():
         f'This link expires in 7 days. Or paste this into your browser:<br><span style="color:#1aa34a;word-break:break-all">{link}</span></p>'
         '</div>'
     )
-    ok = _send_email(to, 'You\'re invited to co-parent on Room Score Tracker', html)
+    text = (
+        f'{inviter} invited you to co-parent on Room Score Tracker — you\'ll both '
+        'manage the same kids\' room scores from your own accounts.\n\n'
+        f'Join here (sign in or create a free account): {link}\n\n'
+        'This link expires in 7 days.'
+    )
+    reply_to = getattr(g.current_user, 'email', None) or None
+    ok = _send_email(
+        to, 'You\'re invited to co-parent on Room Score Tracker',
+        html, text=text, reply_to=reply_to,
+    )
     if not ok:
         return jsonify({'error': 'Could not send the email. Try again.'}), 502
     return jsonify({'ok': True})
